@@ -3,6 +3,8 @@
 Abel is an early-stage project exploring a simpler, lightweight alternative to
 MATLAB and Mathematica for numerical computing.
 
+The first language contract is documented in the [Abel Language Specification](docs/abel-language-spec.md).
+
 ## Current decision
 
 - **C++** will be used to build Abel.
