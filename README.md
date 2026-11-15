@@ -25,3 +25,24 @@ cmake -S . -B build
 cmake --build build
 ./build/abel
 ```
+
+## Running Abel
+
+Run a source file with:
+
+```sh
+./build/abel program.abel
+```
+
+With no file argument, Abel starts an interactive REPL. Expressions are
+echoed there, while scripts only produce output through `print(...)`.
+Multi-line blocks and function definitions are accepted automatically.
+
+Source can also be read from standard input:
+
+```sh
+cat program.abel | ./build/abel -
+```
+
+Use `./build/abel --help` for command-line usage and
+`./build/abel --version` for the installed language version.

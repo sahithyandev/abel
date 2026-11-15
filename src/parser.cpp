@@ -54,7 +54,8 @@ private:
     [[noreturn]] void fail(const std::string& message,
                            ParseErrorCategory category =
                                ParseErrorCategory::UnexpectedToken) const {
-        throw ParseError(category, message, peek().line, peek().column);
+        throw ParseError(category, message, peek().line, peek().column,
+                         check(TokenKind::EndOfFile));
     }
 
     void skip_separators() {
@@ -325,9 +326,9 @@ private:
 }  // namespace
 
 ParseError::ParseError(ParseErrorCategory category, std::string message,
-                       std::size_t line, std::size_t column)
+                       std::size_t line, std::size_t column, bool incomplete)
     : std::runtime_error(error_message(std::move(message), line, column)),
-      category_(category), line_(line), column_(column) {}
+      category_(category), line_(line), column_(column), incomplete_(incomplete) {}
 
 Program parse(const std::vector<Token>& tokens) { return Parser(tokens).parse_program(); }
 

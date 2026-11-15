@@ -7,6 +7,7 @@
 #include <functional>
 #include <iosfwd>
 #include <memory>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -77,6 +78,7 @@ public:
     Evaluator();
 
     Value evaluate(const Program& program);
+    std::optional<Value> evaluate_repl(Program program);
     Value evaluate(std::string_view source);
     const Value& lookup(const std::string& name) const;
 

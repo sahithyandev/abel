@@ -73,6 +73,19 @@ public:
         return Value();
     }
 
+    std::optional<Value> run_repl(const Program& program) {
+        std::optional<Value> result;
+        for (const auto& statement : program.statements) {
+            if (auto* expression_statement =
+                    dynamic_cast<const ExpressionStatement*>(statement.get())) {
+                result = expression_value(*expression_statement->expression);
+            } else {
+                execute(*statement);
+            }
+        }
+        return result;
+    }
+
     Value expression(const Expression& expression) {
         if (auto* literal = dynamic_cast<const LiteralExpression*>(&expression)) return literal_value(*literal);
         if (auto* variable = dynamic_cast<const VariableExpression*>(&expression)) return lookup(variable->name, expression.location);
@@ -213,11 +226,21 @@ std::string Value::to_string() const { std::ostringstream out; switch (kind()) {
 
 RuntimeError::RuntimeError(RuntimeErrorCategory category, std::string message, std::size_t line, std::size_t column) : std::runtime_error(diagnostic(std::move(message), line, column)), category_(category), line_(line), column_(column) {}
 
-struct Evaluator::State { std::shared_ptr<Environment> globals; std::ostream* output; };
+struct Evaluator::State {
+    std::shared_ptr<Environment> globals;
+    std::ostream* output;
+    std::vector<std::shared_ptr<Program>> repl_programs;
+};
 
 Evaluator::Evaluator(std::ostream& output) : state_(std::make_shared<State>()) { state_->globals = std::make_shared<Environment>(); state_->output = &output; auto add = [&](const std::string& name, std::size_t arity, auto fn) { state_->globals->values[name] = Value(std::make_shared<NativeCallable>(arity, fn)); }; add("print", 1, [this](const std::vector<Value>& a, SourceLocation) { *state_->output << a[0].to_string() << '\n'; return Value(); }); add("length", 1, [](const std::vector<Value>& a, SourceLocation l) { if (a[0].kind() == Value::Kind::String) return Value(static_cast<double>(a[0].as_string().size())); if (a[0].kind() == Value::Kind::Array) return Value(static_cast<double>(a[0].as_array().size())); throw RuntimeError(RuntimeErrorCategory::TypeError, "length requires a string or array", l.line, l.column); }); add("sum", 1, [](const std::vector<Value>& a, SourceLocation l) { if (a[0].kind() != Value::Kind::Array) throw RuntimeError(RuntimeErrorCategory::TypeError, "sum requires an array", l.line, l.column); double result = 0; for (const auto& v : a[0].as_array()) { if (v.kind() != Value::Kind::Number) throw RuntimeError(RuntimeErrorCategory::TypeError, "sum requires numeric elements", l.line, l.column); result += v.as_number(); } return Value(result); }); add("min", 1, [](const std::vector<Value>& a, SourceLocation l) { if (a[0].kind() != Value::Kind::Array || a[0].as_array().empty()) throw RuntimeError(RuntimeErrorCategory::InvalidArgument, "min requires a non-empty array", l.line, l.column); double r = std::numeric_limits<double>::infinity(); for (const auto& v : a[0].as_array()) { if (v.kind() != Value::Kind::Number) throw RuntimeError(RuntimeErrorCategory::TypeError, "min requires numeric elements", l.line, l.column); r = std::min(r, v.as_number()); } return Value(r); }); add("max", 1, [](const std::vector<Value>& a, SourceLocation l) { if (a[0].kind() != Value::Kind::Array || a[0].as_array().empty()) throw RuntimeError(RuntimeErrorCategory::InvalidArgument, "max requires a non-empty array", l.line, l.column); double r = -std::numeric_limits<double>::infinity(); for (const auto& v : a[0].as_array()) { if (v.kind() != Value::Kind::Number) throw RuntimeError(RuntimeErrorCategory::TypeError, "max requires numeric elements", l.line, l.column); r = std::max(r, v.as_number()); } return Value(r); }); add("abs", 1, [](const std::vector<Value>& a, SourceLocation l) { if (a[0].kind() != Value::Kind::Number) throw RuntimeError(RuntimeErrorCategory::TypeError, "abs requires a number", l.line, l.column); return Value(std::fabs(a[0].as_number())); }); add("sqrt", 1, [](const std::vector<Value>& a, SourceLocation l) { if (a[0].kind() != Value::Kind::Number || a[0].as_number() < 0) throw RuntimeError(RuntimeErrorCategory::InvalidArgument, "sqrt requires a non-negative number", l.line, l.column); return Value(std::sqrt(a[0].as_number())); }); }
 Evaluator::Evaluator() : Evaluator(std::cout) {}
 Value Evaluator::evaluate(const Program& program) { return Runner(*state_->output, state_->globals).run(program); }
+std::optional<Value> Evaluator::evaluate_repl(Program program) {
+    auto retained = std::make_shared<Program>(std::move(program));
+    const auto result = Runner(*state_->output, state_->globals).run_repl(*retained);
+    state_->repl_programs.push_back(std::move(retained));
+    return result;
+}
 Value Evaluator::evaluate(std::string_view source) { return evaluate(parse(source)); }
 const Value& Evaluator::lookup(const std::string& name) const { auto found = state_->globals->values.find(name); if (found == state_->globals->values.end()) throw std::out_of_range("unknown global name"); return found->second; }
 
