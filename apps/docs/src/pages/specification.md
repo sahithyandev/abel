@@ -1,3 +1,10 @@
+---
+layout: ../layouts/DocsLayout.astro
+title: Abel — Language specification v0.1
+description: The normative v0.1 contract for the Abel programming language.
+showToc: true
+---
+
 # Abel Language Specification
 
 **Status:** Normative v0.1

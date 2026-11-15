@@ -1,2 +1,5 @@
 /build/
+apps/docs/node_modules/
+apps/docs/dist/
+apps/docs/.astro/
 .DS_Store

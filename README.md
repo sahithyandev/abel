@@ -1,48 +1,49 @@
 # Abel
 
-Abel is an early-stage project exploring a simpler, lightweight alternative to
-MATLAB and Mathematica for numerical computing.
+Abel is an early-stage, lightweight scripting language for numerical
+computing. This repository is a monorepo containing the language CLI and its
+documentation website.
 
-The first language contract is documented in the [Abel Language Specification](docs/abel-language-spec.md).
+## Repository layout
 
-## Current decision
+```text
+apps/
+  cli/       C++ interpreter, CLI, and tests
+  docs/      static documentation site and language spec source
+```
 
-- **C++** will be used to build Abel.
+The [Abel Language Specification](apps/docs/content/abel-language-spec.md) is
+the source of truth for the v0.1 language contract.
 
-The rest of the product scope, architecture, language design, libraries, user
-interface, and development tools are still under consideration.
-
-## Project status
-
-This project is currently in the exploration and planning stage.
-
-## Building
-
-The project currently uses CMake for its minimal build setup.
+## Build the CLI
 
 ```sh
 cmake -S . -B build
 cmake --build build
-./build/abel
+ctest --test-dir build --output-on-failure
 ```
 
-## Running Abel
-
-Run a source file with:
+Run Abel with:
 
 ```sh
-./build/abel program.abel
+./build/apps/cli/abel program.abel
 ```
 
-With no file argument, Abel starts an interactive REPL. Expressions are
-echoed there, while scripts only produce output through `print(...)`.
-Multi-line blocks and function definitions are accepted automatically.
+With no file argument, Abel starts an interactive REPL. Use `-` to read source
+from standard input.
 
-Source can also be read from standard input:
+## Run the documentation site
+
+The documentation site is an Astro static site and is ready for Vercel. From
+the docs workspace:
 
 ```sh
-cat program.abel | ./build/abel -
+cd apps/docs
+bun install
+bun run dev
 ```
 
-Use `./build/abel --help` for command-line usage and
-`./build/abel --version` for the installed language version.
+Build the same static output Vercel deploys with `bun run build`; Astro writes
+it to `apps/docs/dist/`. The included `vercel.json` configures this workspace
+for Vercel's Astro build detection. When creating the Vercel project, set its
+Root Directory to `apps/docs`.
