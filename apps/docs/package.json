@@ -3,9 +3,13 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "astro dev",
-    "build": "astro build",
+    "dev": "bun run prepare:wasm && astro dev --force",
+    "build": "bun run prepare:wasm && astro build",
+    "prepare:wasm": "bun scripts/prepare-wasm.mjs",
     "preview": "astro preview"
+  },
+  "dependencies": {
+    "@abel/wasm": "file:../../packages/wasm"
   },
   "devDependencies": {
     "astro": "^5.15.0"

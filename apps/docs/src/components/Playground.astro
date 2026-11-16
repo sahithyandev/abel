@@ -1,0 +1,135 @@
+<section class="playground" aria-labelledby="playground-title">
+  <div class="playground-heading">
+    <div>
+      <h1 id="playground-title">Write a small program.</h1>
+      <p>Run Abel directly in your browser. Nothing is uploaded.</p>
+    </div>
+    <span class="playground-status" data-status aria-live="polite">Ready</span>
+  </div>
+
+  <div class="playground-workspace">
+    <form class="playground-editor" data-playground-form>
+      <label for="abel-source">Abel source</label>
+      <div class="code-editor">
+        <pre class="code-highlight" aria-hidden="true"><code data-highlight></code></pre>
+        <textarea id="abel-source" data-source spellcheck="false" autocomplete="off">fn mean(values) &#123;
+    return sum(values) / length(values)
+&#125;
+
+scores = [72, 81, 95]
+print(mean(scores))</textarea>
+      </div>
+      <div class="playground-controls">
+        <button class="button button-dark" type="submit" data-run>Run <span>↗</span></button>
+        <button class="button button-light" type="button" data-clear>Reset example</button>
+      </div>
+    </form>
+
+    <section class="playground-output" aria-labelledby="output-title">
+      <div class="playground-output-heading">
+        <h2 id="output-title">Output</h2>
+        <span data-runtime>WebAssembly</span>
+      </div>
+      <pre data-output aria-live="polite">Press Run to evaluate your program.</pre>
+    </section>
+  </div>
+</section>
+
+<script>
+  import { createAbelRuntime } from '@abel/wasm';
+
+  const form = document.querySelector('[data-playground-form]');
+  const source = document.querySelector('[data-source]');
+  const highlight = document.querySelector('[data-highlight]');
+  const output = document.querySelector('[data-output]');
+  const runButton = document.querySelector('[data-run]');
+  const clearButton = document.querySelector('[data-clear]');
+  const status = document.querySelector('[data-status]');
+  const initialSource = source.value;
+  let runtimePromise;
+
+  const escapeHtml = (text) => text.replace(/[&<>"']/g, (character) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  }[character]));
+
+  const highlightAbel = (text) => {
+    const token = /(\/\/[^\n]*|"(?:\\.|[^"\\])*"|\b(?:and|else|for|fn|if|in|not|or|return|while)\b|\b(?:true|false|null)\b|\b(?:print|length|sum|min|max|abs|sqrt)(?=\s*\()|\b\d+(?:\.\d+)?\b|==|!=|<=|>=|[+*/%<>=-]|[{}\[\](),;])/g;
+    return text.replace(token, (value) => {
+      let kind = 'operator';
+      if (value.startsWith('//')) kind = 'comment';
+      else if (value.startsWith('"')) kind = 'string';
+      else if (/^(?:and|else|for|fn|if|in|not|or|return|while)$/.test(value)) kind = 'keyword';
+      else if (/^(?:true|false|null)$/.test(value)) kind = 'constant';
+      else if (/^(?:print|length|sum|min|max|abs|sqrt)$/.test(value)) kind = 'builtin';
+      else if (/^\d/.test(value)) kind = 'number';
+      else if (/^[{}\[\](),;]$/.test(value)) kind = 'punctuation';
+      return `<span class="token-${kind}">${escapeHtml(value)}</span>`;
+    });
+  };
+
+  const syncHighlight = () => {
+    highlight.innerHTML = `${highlightAbel(source.value)}\n`;
+    highlight.parentElement.scrollTop = source.scrollTop;
+    highlight.parentElement.scrollLeft = source.scrollLeft;
+  };
+
+  const describeError = (error) => {
+    if (error?.message) return error.message;
+    if (typeof error === 'string') return error;
+    try { return JSON.stringify(error); } catch { return String(error); }
+  };
+  syncHighlight();
+  source.addEventListener('input', syncHighlight);
+  source.addEventListener('scroll', syncHighlight);
+
+  const setStatus = (message, state = '') => {
+    status.textContent = message;
+    status.dataset.state = state;
+  };
+
+  const loadRuntime = () => {
+    runtimePromise ??= createAbelRuntime();
+    return runtimePromise;
+  };
+
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    runButton.disabled = true;
+    setStatus('Loading runtime…', 'loading');
+    output.className = '';
+    output.textContent = '';
+
+    try {
+      const runtime = await loadRuntime();
+      const result = runtime.run(source.value);
+      const lines = [];
+      if (result.output) lines.push(result.output.trimEnd());
+      if (result.ok && result.value !== 'null') lines.push(`↳ ${result.value}`);
+      if (!result.ok) {
+        lines.push(`${result.error.category} error at ${result.error.line}:${result.error.column}`);
+        lines.push(result.error.message);
+        output.dataset.state = 'error';
+        setStatus('Needs attention', 'error');
+      } else {
+        output.dataset.state = 'success';
+        setStatus('Ran successfully', 'success');
+      }
+      output.textContent = lines.join('\n') || 'Program finished without output.';
+    } catch (error) {
+      output.dataset.state = 'error';
+      output.textContent = `The browser runtime could not load. ${describeError(error)}`;
+      setStatus('Unavailable', 'error');
+    } finally {
+      runButton.disabled = false;
+    }
+  });
+
+  clearButton.addEventListener('click', () => {
+    source.value = initialSource;
+    syncHighlight();
+    output.textContent = 'Press Run to evaluate your program.';
+    output.dataset.state = '';
+    setStatus('Ready');
+    source.focus();
+  });
+</script>

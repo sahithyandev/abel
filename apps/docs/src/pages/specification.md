@@ -92,9 +92,18 @@ type.
 
 The following words are keywords in v0.1 and cannot be used as identifiers:
 
-```text
-and else false for fn if not null or return true while
-```
+- `and`
+- `else`
+- `false`
+- `for`
+- `fn`
+- `if`
+- `not`
+- `null`
+- `or`
+- `return`
+- `true`
+- `while`
 
 ### 3.4 Comments and statement endings
 

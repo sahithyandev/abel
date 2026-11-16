@@ -1,7 +1,7 @@
 ---
 import '../styles/global.css';
 
-const { frontmatter = {}, title: directTitle, description: directDescription, showToc: directShowToc = false } = Astro.props;
+const { frontmatter = {}, title: directTitle, description: directDescription, showToc: directShowToc = false, wide = false } = Astro.props;
 const title = frontmatter.title ?? directTitle ?? 'Abel — Language documentation';
 const description = frontmatter.description ?? directDescription ?? 'The Abel programming language documentation.';
 const showToc = frontmatter.showToc ?? directShowToc;
@@ -18,15 +18,16 @@ const showToc = frontmatter.showToc ?? directShowToc;
     <meta property="og:type" content="website" />
     <title>{title}</title>
   </head>
-  <body>
+  <body class:list={{ 'playground-page': wide }}>
     <header class="site-header">
       <a class="wordmark" href="/">abel<span>.</span></a>
       <nav aria-label="Primary navigation">
+        <a href="/playground/">Playground</a>
         <a href="/specification/">Language spec</a>
         <a href="/#about">About Abel</a>
       </nav>
     </header>
-    <main class:list={{ 'docs-shell': showToc, 'page-shell': !showToc }}>
+    <main class:list={{ 'docs-shell': showToc, 'page-shell': !showToc, 'wide-shell': wide }}>
       {showToc && <aside class="toc">
         <p>On this page</p>
         <nav aria-label="Specification sections">
