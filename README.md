@@ -100,6 +100,8 @@ Install the Emscripten SDK and activate its environment, then run:
 bun --cwd packages/wasm run build
 ```
 
+From the repository root, the same build is available as `make wasm`.
+
 This writes `abel.js` and `abel.wasm` to `packages/wasm/dist/`. The docs build
 copies those files into its static assets:
 
@@ -118,6 +120,18 @@ cmake -S . -B build
 cmake --build build
 ctest --test-dir build --output-on-failure
 ```
+
+The shorter root-level commands are:
+
+```sh
+make cli       # compile the native CLI
+make test      # compile and run the C++ tests
+make wasm      # build the WebAssembly runtime
+make docs      # build the documentation site
+make run ARGS=program.abel
+```
+
+Run `make help` to see all available commands.
 
 Run Abel with:
 
