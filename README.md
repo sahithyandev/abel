@@ -82,11 +82,34 @@ for the complete syntax reference.
 ```text
 apps/
   cli/       C++ interpreter, CLI, and tests
+  wasm/      Emscripten browser adapter
   docs/      static documentation site and language spec source
+packages/
+  wasm/      private browser-runtime package consumed by the docs site
 ```
 
 The [Abel Language Specification](apps/docs/src/pages/specification.md) is
 the source of truth for the v0.1 language contract.
+
+## Build the WebAssembly runtime
+
+The browser runtime uses the same tokenizer, parser, and evaluator as the CLI.
+Install the Emscripten SDK and activate its environment, then run:
+
+```sh
+bun --cwd packages/wasm run build
+```
+
+This writes `abel.js` and `abel.wasm` to `packages/wasm/dist/`. The docs build
+copies those files into its static assets:
+
+```sh
+cd apps/docs
+bun install
+bun run build
+```
+
+The online playground is available at `/playground/` in the generated site.
 
 ## Build the CLI
 

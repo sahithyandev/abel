@@ -1,5 +1,8 @@
 /build/
+packages/wasm/build/
+packages/wasm/dist/
 apps/docs/node_modules/
 apps/docs/dist/
 apps/docs/.astro/
+apps/docs/public/wasm/
 .DS_Store

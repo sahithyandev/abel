@@ -1,0 +1,13 @@
+{
+  "name": "@abel/wasm",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "files": ["src", "dist"],
+  "scripts": {
+    "build": "emcmake cmake -S ../.. -B build -DABEL_BUILD_CLI=OFF -DABEL_BUILD_WASM=ON -DBUILD_TESTING=OFF -DCMAKE_BUILD_TYPE=Release && cmake --build build --target abel_wasm"
+  }
+}
