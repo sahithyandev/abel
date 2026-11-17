@@ -67,6 +67,14 @@ Value ExtensionValue::get_member(std::string_view, SourceLocation) const {
     return Value();
 }
 
+bool ExtensionValue::supports_indexing() const { return false; }
+
+Value ExtensionValue::get_index(const Value &, SourceLocation) const {
+    return Value();
+}
+
+void ExtensionValue::set_index(const Value &, const Value &, SourceLocation) {}
+
 struct Callable {
     virtual ~Callable() = default;
     virtual Value call(const std::vector<Value> &arguments,
@@ -435,6 +443,12 @@ class Runner {
     }
     Value indexed(Value &object, const Value &position,
                   SourceLocation location) {
+        if (object.kind() == Value::Kind::Extension) {
+            if (!object.as_extension()->supports_indexing())
+                fail(RuntimeErrorCategory::InvalidIndex,
+                     "value does not support indexing", location);
+            return object.as_extension()->get_index(position, location);
+        }
         if (object.kind() != Value::Kind::Array ||
             position.kind() != Value::Kind::Number)
             fail(RuntimeErrorCategory::InvalidIndex,
@@ -448,6 +462,13 @@ class Runner {
     }
     void set_index(Value &object, const Value &position, const Value &value,
                    SourceLocation location) {
+        if (object.kind() == Value::Kind::Extension) {
+            if (!object.as_extension()->supports_indexing())
+                fail(RuntimeErrorCategory::InvalidIndex,
+                     "value does not support indexing", location);
+            object.as_extension()->set_index(position, value, location);
+            return;
+        }
         if (object.kind() != Value::Kind::Array ||
             position.kind() != Value::Kind::Number)
             fail(RuntimeErrorCategory::InvalidIndex,

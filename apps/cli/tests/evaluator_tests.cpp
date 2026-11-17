@@ -21,6 +21,27 @@ class PointValue final : public ExtensionValue {
         const auto *point = dynamic_cast<const PointValue *>(&other);
         return point && x == point->x && y == point->y;
     }
+    bool supports_indexing() const override { return true; }
+    Value get_index(const Value &index,
+                    SourceLocation location) const override {
+        if (index.kind() != Value::Kind::Number ||
+            (index.as_number() != 0 && index.as_number() != 1))
+            throw RuntimeError(RuntimeErrorCategory::InvalidIndex,
+                               "point index must be 0 or 1", location.line,
+                               location.column);
+        return Value(index.as_number() == 0 ? x : y);
+    }
+    void set_index(const Value &index, const Value &value,
+                   SourceLocation location) override {
+        if (index.kind() != Value::Kind::Number ||
+            (index.as_number() != 0 && index.as_number() != 1) ||
+            value.kind() != Value::Kind::Number)
+            throw RuntimeError(
+                RuntimeErrorCategory::InvalidIndex,
+                "point assignment requires numeric index and value",
+                location.line, location.column);
+        (index.as_number() == 0 ? x : y) = value.as_number();
+    }
 
     double x;
     double y;
@@ -271,9 +292,10 @@ void test_extension_registry() {
 
     Evaluator value_evaluator(std::cout, value_extensions);
     value_evaluator.evaluate(
-        "p = point(2, 3); q = point(2, 3); x = point_x(p); same = p == q; "
-        "shown = p");
+        "p = point(2, 3); q = point(2, 8); x = point_x(p); first = p[0]; "
+        "p[1] = 8; same = p == q; shown = p");
     require(number(value_evaluator, "x") == 2 &&
+                number(value_evaluator, "first") == 2 &&
                 value_evaluator.lookup("same").as_boolean() &&
                 value_evaluator.lookup("shown").to_string().find("point(2") ==
                     0,

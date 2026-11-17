@@ -28,6 +28,10 @@ class ExtensionValue {
     virtual bool has_member(std::string_view name) const;
     virtual Value get_member(std::string_view name,
                              SourceLocation location) const;
+    virtual bool supports_indexing() const;
+    virtual Value get_index(const Value &index, SourceLocation location) const;
+    virtual void set_index(const Value &index, const Value &value,
+                           SourceLocation location);
 };
 
 class Value {
