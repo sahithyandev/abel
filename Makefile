@@ -4,7 +4,7 @@ BUN ?= bun
 
 .DEFAULT_GOAL := help
 
-.PHONY: help configure cli build test wasm docs docs-dev run clean
+.PHONY: help configure cli build test wasm docs docs-dev run clean setup-hooks
 
 help:
 	@printf '%s\n' \
@@ -15,7 +15,11 @@ help:
 		'  make docs      Build the documentation site' \
 		'  make docs-dev  Start the documentation site locally' \
 		'  make run ARGS="file.abel"  Run the compiled CLI' \
+		'  make setup-hooks Enable the repository Git hooks' \
 		'  make clean     Remove native build outputs'
+
+setup-hooks:
+	./scripts/setup-git-hooks.sh
 
 configure:
 	$(CMAKE) -S . -B $(BUILD_DIR)
