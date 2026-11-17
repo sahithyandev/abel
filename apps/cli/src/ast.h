@@ -94,6 +94,12 @@ struct Statement {
 };
 using StatementPtr = std::unique_ptr<Statement>;
 
+struct ExportStatement final : Statement {
+    ExportStatement(SourceLocation location, StatementPtr declaration)
+        : Statement(location), declaration(std::move(declaration)) {}
+    StatementPtr declaration;
+};
+
 struct ImportStatement final : Statement {
     ImportStatement(SourceLocation location, std::string module)
         : Statement(location), module(std::move(module)) {}

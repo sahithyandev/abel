@@ -71,6 +71,9 @@ class Parser {
     }
 
     StatementPtr parse_statement() {
+        if (match(TokenKind::Export))
+            return std::make_unique<ExportStatement>(location(previous()),
+                                                     parse_statement());
         if (match(TokenKind::Import))
             return parse_import(previous());
         if (match(TokenKind::LeftBrace))

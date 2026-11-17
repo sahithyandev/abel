@@ -16,6 +16,7 @@ enum class TokenKind {
 
     And,
     Else,
+    Export,
     False,
     For,
     Fn,

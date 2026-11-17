@@ -171,9 +171,10 @@ bool equal_values(const Value &left, const Value &right);
 class Runner {
   public:
     Runner(std::ostream &output, std::shared_ptr<Environment> globals,
-           const std::unordered_map<std::string, Value> *modules)
+           const std::unordered_map<std::string, Value> *modules,
+           std::unordered_map<std::string, Value> *exports = nullptr)
         : globals_(std::move(globals)), environment_(globals_),
-          modules_(modules) {
+          modules_(modules), exports_(exports) {
         (void)output;
     }
 
@@ -250,6 +251,36 @@ class Runner {
     void execute(const Statement &statement) {
         if (auto *block = dynamic_cast<const BlockStatement *>(&statement)) {
             execute_statements(block->statements);
+            return;
+        }
+        if (auto *exported =
+                dynamic_cast<const ExportStatement *>(&statement)) {
+            if (!exports_)
+                fail(RuntimeErrorCategory::InvalidArgument,
+                     "export is only valid inside a module",
+                     statement.location);
+            execute(*exported->declaration);
+
+            std::string name;
+            if (auto *function = dynamic_cast<const FunctionStatement *>(
+                    exported->declaration.get()))
+                name = function->name;
+            else if (auto *assignment =
+                         dynamic_cast<const AssignmentStatement *>(
+                             exported->declaration.get())) {
+                if (auto *variable = dynamic_cast<const VariableExpression *>(
+                        assignment->target.get()))
+                    name = variable->name;
+            }
+            if (name.empty())
+                fail(RuntimeErrorCategory::InvalidArgument,
+                     "only functions and names can be exported",
+                     statement.location);
+            if (!exports_->emplace(name, lookup(name, statement.location))
+                     .second)
+                fail(RuntimeErrorCategory::InvalidArgument,
+                     "duplicate module export '" + name + "'",
+                     statement.location);
             return;
         }
         if (auto *imported =
@@ -373,6 +404,7 @@ class Runner {
     };
     std::shared_ptr<Environment> globals_, environment_;
     const std::unordered_map<std::string, Value> *modules_;
+    std::unordered_map<std::string, Value> *exports_;
     bool in_function_ = false;
     Value expression_value(const Expression &e) { return expression(e); }
     [[noreturn]] void fail(RuntimeErrorCategory category,

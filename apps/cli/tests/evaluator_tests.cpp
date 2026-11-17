@@ -225,6 +225,12 @@ void test_errors() {
     require_error(
         [] {
             Evaluator e;
+            e.evaluate("export fn hidden() { return 1 }");
+        },
+        RuntimeErrorCategory::InvalidArgument, 1, 1);
+    require_error(
+        [] {
+            Evaluator e;
             e.evaluate("sum([1, true])");
         },
         RuntimeErrorCategory::TypeError, 1, 1);
