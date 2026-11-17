@@ -45,11 +45,19 @@ export function parseNotebook(
 ): Notebook {
   const parsed = JSON.parse(text) as Partial<Notebook>;
   if (
+    !parsed ||
     parsed.format !== 1 ||
     !Array.isArray(parsed.cells) ||
     parsed.cells.length === 0
   )
     throw new Error("unsupported notebook format");
+  if (
+    parsed.cells.some(
+      (cell) =>
+        !cell || typeof cell !== "object" || typeof cell.source !== "string",
+    )
+  )
+    throw new Error("invalid notebook cells");
   return {
     format: 1,
     cells: parsed.cells.map((cell) => ({

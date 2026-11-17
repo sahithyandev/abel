@@ -39,6 +39,12 @@ describe("notebook model", () => {
     expect(() =>
       parseNotebook(JSON.stringify({ format: 2, cells: [] })),
     ).toThrow("unsupported notebook format");
+    expect(() =>
+      parseNotebook(JSON.stringify({ format: 1, cells: [{ source: 42 }] })),
+    ).toThrow("invalid notebook cells");
+    expect(() =>
+      parseNotebook(JSON.stringify({ format: 1, cells: [null] })),
+    ).toThrow("invalid notebook cells");
   });
 
   test("creates independent blank cells", () => {

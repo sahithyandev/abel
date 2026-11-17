@@ -1,4 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+import { open, save, message as showMessage } from "@tauri-apps/plugin-dialog";
+import { exists, readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
 import { runNotebook } from "@abel/wasm";
 import {
   makeCell,
@@ -11,6 +14,14 @@ import "./App.css";
 
 const readEditable = (element: HTMLDivElement) =>
   element.innerText.replace(/\r\n/g, "\n");
+
+const notebookFilter = [{ name: "Abel Notebook", extensions: ["abelnb"] }];
+
+const filenameFromPath = (path: string) =>
+  path.split(/[\\/]/).filter(Boolean).pop() ?? "untitled.abelnb";
+
+const withNotebookExtension = (path: string) =>
+  path.toLowerCase().endsWith(".abelnb") ? path : `${path}.abelnb`;
 
 function CodeInput({
   value,
@@ -92,15 +103,20 @@ function App() {
   const [running, setRunning] = useState(false);
   const [message, setMessage] = useState("Ready");
   const [filename, setFilename] = useState("untitled.abelnb");
+  const [currentPath, setCurrentPath] = useState<string | null>(null);
   const [dirty, setDirty] = useState(false);
-  const fileInput = useRef<HTMLInputElement>(null);
+  const [persisting, setPersisting] = useState(false);
+  const allowClose = useRef(false);
+  const dirtyRef = useRef(dirty);
+  const saveRef = useRef<() => Promise<boolean>>(async () => false);
+  dirtyRef.current = dirty;
 
   useEffect(() => {
     const handleShortcut = (event: KeyboardEvent) => {
       if (!(event.metaKey || event.ctrlKey)) return;
       if (event.key === "s") {
         event.preventDefault();
-        saveNotebook();
+        void saveNotebook();
       }
       if (event.key === "Enter") {
         event.preventDefault();
@@ -190,53 +206,153 @@ function App() {
     setDirty(true);
   };
 
-  const canDiscard = () =>
-    !dirty || window.confirm("Discard unsaved notebook changes?");
-  const createNotebook = () => {
-    if (!canDiscard()) return;
+  const confirmDiscard = async () => {
+    if (!dirty) return true;
+    const choice = await showMessage("This notebook has unsaved changes.", {
+      title: "Unsaved changes",
+      kind: "warning",
+      buttons: { yes: "Save", no: "Discard", cancel: "Cancel" },
+    });
+    if (choice === "yes") return await saveNotebook();
+    return choice === "no";
+  };
+
+  const createNotebook = async () => {
+    if (!(await confirmDiscard())) return;
     setNotebook(newNotebook());
     setFilename("untitled.abelnb");
+    setCurrentPath(null);
     setSelected(0);
     setDirty(false);
     setMessage("New notebook");
   };
-  const requestOpen = () => {
-    if (canDiscard()) fileInput.current?.click();
+
+  const writeNotebook = async (path: string) => {
+    try {
+      setPersisting(true);
+      setMessage("Saving…");
+      await writeTextFile(path, notebookPayload(notebook));
+      setCurrentPath(path);
+      setFilename(filenameFromPath(path));
+      setDirty(false);
+      setMessage("Notebook saved");
+      return true;
+    } catch (error) {
+      setMessage(
+        `Could not save notebook: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return false;
+    } finally {
+      setPersisting(false);
+    }
   };
 
-  const openNotebook = (event: Event) => {
-    const input = event.currentTarget as HTMLInputElement;
-    const file = input.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      try {
-        setNotebook(parseNotebook(String(reader.result)));
-        setFilename(file.name);
-        setSelected(0);
-        setDirty(false);
-        setMessage("Notebook opened");
-      } catch (error) {
-        setMessage(
-          `Could not open notebook: ${error instanceof Error ? error.message : String(error)}`,
-        );
+  const saveNotebookAs = async () => {
+    if (persisting) return false;
+    try {
+      const selectedPath = await save({
+        title: "Save Abel Notebook",
+        defaultPath: filename,
+        filters: notebookFilter,
+      });
+      if (!selectedPath) {
+        setMessage("Save cancelled");
+        return false;
       }
+      const path = withNotebookExtension(selectedPath);
+      if (await exists(path)) {
+        const overwrite = await showMessage(
+          `Replace “${filenameFromPath(path)}”?`,
+          {
+            title: "File already exists",
+            kind: "warning",
+            buttons: "YesNo",
+          },
+        );
+        if (overwrite !== "Yes") {
+          setMessage("Save cancelled");
+          return false;
+        }
+      }
+      return await writeNotebook(path);
+    } catch (error) {
+      setMessage(
+        `Could not save notebook: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return false;
+    }
+  };
+
+  const saveNotebook = async () => {
+    if (persisting) return false;
+    if (!currentPath) return await saveNotebookAs();
+    return await writeNotebook(currentPath);
+  };
+  saveRef.current = saveNotebook;
+
+  const requestOpen = async () => {
+    if (!(await confirmDiscard())) return;
+    let selectedPath: string | string[] | null;
+    try {
+      selectedPath = await open({
+        title: "Open Abel Notebook",
+        multiple: false,
+        filters: notebookFilter,
+      });
+    } catch (error) {
+      setMessage(
+        `Could not open notebook: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return;
+    }
+    if (!selectedPath || Array.isArray(selectedPath)) {
+      setMessage("Open cancelled");
+      return;
+    }
+    if (!selectedPath.toLowerCase().endsWith(".abelnb")) {
+      setMessage("Could not open notebook: expected a .abelnb file");
+      return;
+    }
+    try {
+      setPersisting(true);
+      setMessage("Opening…");
+      const parsed = parseNotebook(await readTextFile(selectedPath));
+      setNotebook(parsed);
+      setFilename(filenameFromPath(selectedPath));
+      setCurrentPath(selectedPath);
+      setSelected(0);
+      setDirty(false);
+      setMessage("Notebook opened");
+    } catch (error) {
+      setMessage(
+        `Could not open notebook: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    } finally {
+      setPersisting(false);
+    }
+  };
+
+  useEffect(() => {
+    const currentWindow = getCurrentWindow();
+    let active = true;
+    const unlisten = currentWindow.onCloseRequested(async (event) => {
+      if (!active || allowClose.current || !dirtyRef.current) return;
+      event.preventDefault();
+      const choice = await showMessage("Save changes before closing?", {
+        title: "Unsaved changes",
+        kind: "warning",
+        buttons: { yes: "Save", no: "Discard", cancel: "Cancel" },
+      });
+      if (choice === "cancel") return;
+      if (choice === "yes" && !(await saveRef.current())) return;
+      allowClose.current = true;
+      await currentWindow.close();
+    });
+    return () => {
+      active = false;
+      void unlisten.then((dispose) => dispose());
     };
-    reader.readAsText(file);
-    input.value = "";
-  };
-  const saveNotebook = () => {
-    const payload = notebookPayload(notebook);
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(
-      new Blob([payload], { type: "application/json" }),
-    );
-    link.download = filename;
-    link.click();
-    URL.revokeObjectURL(link.href);
-    setDirty(false);
-    setMessage("Notebook saved");
-  };
+  }, []);
   const clearOutputs = () =>
     setNotebook((current) => ({
       ...current,
@@ -259,15 +375,27 @@ function App() {
           <span class="brand-document">Notebook</span>
         </div>
         <nav class="toolbar" aria-label="Notebook actions">
-          <button class="tool-button" onClick={createNotebook}>
+          <button
+            class="tool-button"
+            onClick={() => void createNotebook()}
+            disabled={persisting}
+          >
             <Icon name="plus" />
             New
           </button>
-          <button class="tool-button" onClick={requestOpen}>
+          <button
+            class="tool-button"
+            onClick={() => void requestOpen()}
+            disabled={persisting}
+          >
             <Icon name="open" />
             Open
           </button>
-          <button class="tool-button" onClick={saveNotebook}>
+          <button
+            class="tool-button"
+            onClick={() => void saveNotebook()}
+            disabled={persisting}
+          >
             <Icon name="save" />
             Save <kbd>⌘S</kbd>
           </button>
@@ -289,13 +417,6 @@ function App() {
             Run all
           </button>
         </nav>
-        <input
-          ref={fileInput}
-          class="visually-hidden"
-          type="file"
-          accept=".abelnb,.json"
-          onChange={openNotebook}
-        />
       </header>
       <div class="workspace">
         <section class="notebook" aria-label="Abel notebook">
