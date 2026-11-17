@@ -19,11 +19,28 @@ namespace abel {
 struct Callable;
 using Array = std::vector<class Value>;
 
+class ExtensionValue {
+  public:
+    virtual ~ExtensionValue() = default;
+    virtual std::string type_name() const = 0;
+    virtual std::string to_string() const = 0;
+    virtual bool equals(const ExtensionValue &other) const;
+};
+
 class Value {
   public:
     using ArrayPtr = std::shared_ptr<Array>;
     using CallablePtr = std::shared_ptr<Callable>;
-    enum class Kind { Number, String, Boolean, Null, Array, Function };
+    using ExtensionValuePtr = std::shared_ptr<ExtensionValue>;
+    enum class Kind {
+        Number,
+        String,
+        Boolean,
+        Null,
+        Array,
+        Function,
+        Extension
+    };
 
     Value();
     explicit Value(double value);
@@ -31,6 +48,7 @@ class Value {
     explicit Value(bool value);
     explicit Value(Array value);
     explicit Value(CallablePtr value);
+    explicit Value(ExtensionValuePtr value);
 
     Kind kind() const noexcept;
     bool is_null() const noexcept;
@@ -40,12 +58,13 @@ class Value {
     const Array &as_array() const;
     Array &as_array();
     const CallablePtr &as_callable() const;
+    const ExtensionValuePtr &as_extension() const;
     bool truthy() const noexcept;
     std::string to_string() const;
 
   private:
     std::variant<double, std::string, bool, std::monostate, ArrayPtr,
-                 CallablePtr>
+                 CallablePtr, ExtensionValuePtr>
         value_;
 };
 
@@ -74,9 +93,33 @@ class RuntimeError : public std::runtime_error {
     std::size_t column_;
 };
 
+class ExtensionRegistry {
+  public:
+    using NativeFunction =
+        std::function<Value(const std::vector<Value> &, SourceLocation)>;
+
+    ExtensionRegistry();
+    ExtensionRegistry(const ExtensionRegistry &);
+    ExtensionRegistry &operator=(const ExtensionRegistry &);
+    ExtensionRegistry(ExtensionRegistry &&) noexcept;
+    ExtensionRegistry &operator=(ExtensionRegistry &&) noexcept;
+    ~ExtensionRegistry();
+
+    void register_function(std::string name, std::size_t arity,
+                           NativeFunction function);
+
+  private:
+    struct Function;
+    struct State;
+    std::shared_ptr<State> state_;
+
+    friend class Evaluator;
+};
+
 class Evaluator {
   public:
     explicit Evaluator(std::ostream &output);
+    Evaluator(std::ostream &output, const ExtensionRegistry &extensions);
     Evaluator();
 
     Value evaluate(const Program &program);

@@ -9,6 +9,23 @@
 namespace {
 using namespace abel;
 
+class PointValue final : public ExtensionValue {
+  public:
+    PointValue(double x, double y) : x(x), y(y) {}
+
+    std::string type_name() const override { return "test.point"; }
+    std::string to_string() const override {
+        return "point(" + std::to_string(x) + ", " + std::to_string(y) + ")";
+    }
+    bool equals(const ExtensionValue &other) const override {
+        const auto *point = dynamic_cast<const PointValue *>(&other);
+        return point && x == point->x && y == point->y;
+    }
+
+    double x;
+    double y;
+};
+
 void require(bool condition, const std::string &message) {
     if (!condition) {
         std::cerr << "FAIL: " << message << '\n';
@@ -213,6 +230,55 @@ void test_repl_evaluation() {
     require(second && second->as_number() == 21,
             "REPL preserves state between cells");
 }
+
+void test_extension_registry() {
+    ExtensionRegistry extensions;
+    extensions.register_function(
+        "double_value", 1,
+        [](const std::vector<Value> &arguments, SourceLocation location) {
+            if (arguments[0].kind() != Value::Kind::Number)
+                throw RuntimeError(RuntimeErrorCategory::TypeError,
+                                   "double_value requires a number",
+                                   location.line, location.column);
+            return Value(arguments[0].as_number() * 2);
+        });
+
+    Evaluator evaluator(std::cout, extensions);
+    evaluator.evaluate("answer = double_value(21)");
+    require(number(evaluator, "answer") == 42, "registered extension function");
+
+    require_error([&] { evaluator.evaluate("double_value(\"x\")"); },
+                  RuntimeErrorCategory::TypeError, 1, 1);
+
+    ExtensionRegistry value_extensions;
+    value_extensions.register_function(
+        "point", 2, [](const std::vector<Value> &arguments, SourceLocation) {
+            return Value(std::make_shared<PointValue>(
+                arguments[0].as_number(), arguments[1].as_number()));
+        });
+    value_extensions.register_function(
+        "point_x", 1,
+        [](const std::vector<Value> &arguments, SourceLocation location) {
+            if (arguments[0].kind() != Value::Kind::Extension ||
+                arguments[0].as_extension()->type_name() != "test.point")
+                throw RuntimeError(RuntimeErrorCategory::TypeError,
+                                   "point_x requires a point", location.line,
+                                   location.column);
+            return Value(
+                static_cast<const PointValue &>(*arguments[0].as_extension())
+                    .x);
+        });
+
+    Evaluator value_evaluator(std::cout, value_extensions);
+    value_evaluator.evaluate(
+        "p = point(2, 3); q = point(2, 3); x = point_x(p); same = p == q; "
+        "shown = p");
+    require(number(value_evaluator, "x") == 2 &&
+                value_evaluator.lookup("same").as_boolean() &&
+                value_evaluator.lookup("shown").to_string().find("point(2") ==
+                    0,
+            "custom extension value");
+}
 } // namespace
 
 int main() {
@@ -223,6 +289,7 @@ int main() {
     test_equality_and_short_circuit();
     test_errors();
     test_repl_evaluation();
+    test_extension_registry();
     std::cout << "Evaluator tests passed\n";
     return EXIT_SUCCESS;
 }

@@ -6,10 +6,50 @@
 #include <iostream>
 #include <limits>
 #include <sstream>
+#include <stdexcept>
 #include <unordered_map>
 #include <utility>
 
 namespace abel {
+
+struct ExtensionRegistry::Function {
+    std::size_t arity;
+    NativeFunction function;
+};
+
+struct ExtensionRegistry::State {
+    std::unordered_map<std::string, Function> functions;
+};
+
+ExtensionRegistry::ExtensionRegistry() : state_(std::make_shared<State>()) {}
+ExtensionRegistry::ExtensionRegistry(const ExtensionRegistry &other)
+    : state_(std::make_shared<State>(*other.state_)) {}
+ExtensionRegistry &
+ExtensionRegistry::operator=(const ExtensionRegistry &other) {
+    if (this != &other)
+        state_ = std::make_shared<State>(*other.state_);
+    return *this;
+}
+ExtensionRegistry::ExtensionRegistry(ExtensionRegistry &&) noexcept = default;
+ExtensionRegistry &
+ExtensionRegistry::operator=(ExtensionRegistry &&) noexcept = default;
+ExtensionRegistry::~ExtensionRegistry() = default;
+
+void ExtensionRegistry::register_function(std::string name, std::size_t arity,
+                                          NativeFunction function) {
+    if (name.empty())
+        throw std::invalid_argument("extension function name cannot be empty");
+    if (!function)
+        throw std::invalid_argument("extension function cannot be empty");
+    const auto [_, inserted] = state_->functions.emplace(
+        std::move(name), Function{arity, std::move(function)});
+    if (!inserted)
+        throw std::invalid_argument("extension function is already registered");
+}
+
+bool ExtensionValue::equals(const ExtensionValue &other) const {
+    return this == &other;
+}
 
 struct Callable {
     virtual ~Callable() = default;
@@ -372,6 +412,10 @@ bool equal_values(const Value &left, const Value &right) {
         return left.as_boolean() == right.as_boolean();
     case Value::Kind::Function:
         return left.as_callable() == right.as_callable();
+    case Value::Kind::Extension:
+        return left.as_extension()->type_name() ==
+                   right.as_extension()->type_name() &&
+               left.as_extension()->equals(*right.as_extension());
     case Value::Kind::Array:
         if (left.as_array().size() != right.as_array().size())
             return false;
@@ -391,6 +435,7 @@ Value::Value(std::string value) : value_(std::move(value)) {}
 Value::Value(bool value) : value_(value) {}
 Value::Value(Array value) : value_(std::make_shared<Array>(std::move(value))) {}
 Value::Value(CallablePtr value) : value_(std::move(value)) {}
+Value::Value(ExtensionValuePtr value) : value_(std::move(value)) {}
 Value::Kind Value::kind() const noexcept {
     return static_cast<Kind>(value_.index());
 }
@@ -404,6 +449,9 @@ const Array &Value::as_array() const { return *std::get<ArrayPtr>(value_); }
 Array &Value::as_array() { return *std::get<ArrayPtr>(value_); }
 const Value::CallablePtr &Value::as_callable() const {
     return std::get<CallablePtr>(value_);
+}
+const Value::ExtensionValuePtr &Value::as_extension() const {
+    return std::get<ExtensionValuePtr>(value_);
 }
 bool Value::truthy() const noexcept {
     return kind() != Kind::Null && !(kind() == Kind::Boolean && !as_boolean());
@@ -422,6 +470,8 @@ std::string Value::to_string() const {
         return as_boolean() ? "true" : "false";
     case Kind::Function:
         return "<function>";
+    case Kind::Extension:
+        return as_extension()->to_string();
     case Kind::Array:
         out << "[";
         for (std::size_t i = 0; i < as_array().size(); ++i) {
@@ -446,7 +496,11 @@ struct Evaluator::State {
     std::vector<std::shared_ptr<Program>> repl_programs;
 };
 
-Evaluator::Evaluator(std::ostream &output) : state_(std::make_shared<State>()) {
+Evaluator::Evaluator(std::ostream &output)
+    : Evaluator(output, ExtensionRegistry{}) {}
+
+Evaluator::Evaluator(std::ostream &output, const ExtensionRegistry &extensions)
+    : state_(std::make_shared<State>()) {
     state_->globals = std::make_shared<Environment>();
     state_->output = &output;
     auto add = [&](const std::string &name, std::size_t arity, auto fn) {
@@ -523,6 +577,10 @@ Evaluator::Evaluator(std::ostream &output) : state_(std::make_shared<State>()) {
                                l.column);
         return Value(std::sqrt(a[0].as_number()));
     });
+
+    for (const auto &[name, function] : extensions.state_->functions) {
+        add(name, function.arity, function.function);
+    }
 }
 Evaluator::Evaluator() : Evaluator(std::cout) {}
 Value Evaluator::evaluate(const Program &program) {
