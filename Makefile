@@ -33,10 +33,10 @@ wasm:
 	$(BUN) --cwd packages/wasm run build
 
 docs:
-	$(BUN) --cwd apps/docs run build
+	$(BUN) run --cwd apps/docs build
 
 docs-dev:
-	$(BUN) --cwd apps/docs run dev
+	$(BUN) run --cwd apps/docs dev
 
 run: cli
 	$(BUILD_DIR)/apps/cli/abel $(ARGS)
