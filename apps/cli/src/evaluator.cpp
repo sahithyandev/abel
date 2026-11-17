@@ -75,6 +75,14 @@ Value ExtensionValue::get_index(const Value &, SourceLocation) const {
 
 void ExtensionValue::set_index(const Value &, const Value &, SourceLocation) {}
 
+bool ExtensionValue::supports_length() const { return false; }
+
+Value ExtensionValue::length(SourceLocation) const { return Value(); }
+
+bool ExtensionValue::supports_iteration() const { return false; }
+
+std::vector<Value> ExtensionValue::iterate(SourceLocation) const { return {}; }
+
 struct Callable {
     virtual ~Callable() = default;
     virtual Value call(const std::vector<Value> &arguments,
@@ -288,6 +296,17 @@ class Runner {
         }
         if (auto *loop = dynamic_cast<const ForStatement *>(&statement)) {
             Value iterable = expression_value(*loop->iterable);
+            if (iterable.kind() == Value::Kind::Extension) {
+                if (!iterable.as_extension()->supports_iteration())
+                    fail(RuntimeErrorCategory::TypeError,
+                         "for requires an iterable value", statement.location);
+                for (const Value &item :
+                     iterable.as_extension()->iterate(statement.location)) {
+                    assign(loop->variable, item);
+                    execute(*loop->body);
+                }
+                return;
+            }
             if (iterable.kind() != Value::Kind::Array)
                 fail(RuntimeErrorCategory::TypeError, "for requires an array",
                      statement.location);
@@ -601,9 +620,13 @@ Evaluator::Evaluator(std::ostream &output, const ExtensionRegistry &extensions)
             return Value(static_cast<double>(a[0].as_string().size()));
         if (a[0].kind() == Value::Kind::Array)
             return Value(static_cast<double>(a[0].as_array().size()));
-        throw RuntimeError(RuntimeErrorCategory::TypeError,
-                           "length requires a string or array", l.line,
-                           l.column);
+        if (a[0].kind() == Value::Kind::Extension &&
+            a[0].as_extension()->supports_length())
+            return a[0].as_extension()->length(l);
+        throw RuntimeError(
+            RuntimeErrorCategory::TypeError,
+            "length requires a string, array, or extension value", l.line,
+            l.column);
     });
     add("sum", 1, [](const std::vector<Value> &a, SourceLocation l) {
         if (a[0].kind() != Value::Kind::Array)

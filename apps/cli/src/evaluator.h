@@ -32,6 +32,10 @@ class ExtensionValue {
     virtual Value get_index(const Value &index, SourceLocation location) const;
     virtual void set_index(const Value &index, const Value &value,
                            SourceLocation location);
+    virtual bool supports_length() const;
+    virtual Value length(SourceLocation location) const;
+    virtual bool supports_iteration() const;
+    virtual std::vector<Value> iterate(SourceLocation location) const;
 };
 
 class Value {

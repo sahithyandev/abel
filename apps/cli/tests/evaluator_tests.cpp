@@ -42,6 +42,12 @@ class PointValue final : public ExtensionValue {
                 location.line, location.column);
         (index.as_number() == 0 ? x : y) = value.as_number();
     }
+    bool supports_length() const override { return true; }
+    Value length(SourceLocation) const override { return Value(2.0); }
+    bool supports_iteration() const override { return true; }
+    std::vector<Value> iterate(SourceLocation) const override {
+        return {Value(x), Value(y)};
+    }
 
     double x;
     double y;
@@ -293,9 +299,13 @@ void test_extension_registry() {
     Evaluator value_evaluator(std::cout, value_extensions);
     value_evaluator.evaluate(
         "p = point(2, 3); q = point(2, 8); x = point_x(p); first = p[0]; "
-        "p[1] = 8; same = p == q; shown = p");
+        "p[1] = 8; size = length(p); total = 0; for item in p { total = total "
+        "+ item }; "
+        "same = p == q; shown = p");
     require(number(value_evaluator, "x") == 2 &&
                 number(value_evaluator, "first") == 2 &&
+                number(value_evaluator, "size") == 2 &&
+                number(value_evaluator, "total") == 10 &&
                 value_evaluator.lookup("same").as_boolean() &&
                 value_evaluator.lookup("shown").to_string().find("point(2") ==
                     0,
