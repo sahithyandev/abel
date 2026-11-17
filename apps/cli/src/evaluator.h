@@ -25,6 +25,9 @@ class ExtensionValue {
     virtual std::string type_name() const = 0;
     virtual std::string to_string() const = 0;
     virtual bool equals(const ExtensionValue &other) const;
+    virtual bool has_member(std::string_view name) const;
+    virtual Value get_member(std::string_view name,
+                             SourceLocation location) const;
 };
 
 class Value {
@@ -107,6 +110,7 @@ class ExtensionRegistry {
 
     void register_function(std::string name, std::size_t arity,
                            NativeFunction function);
+    void register_module(std::string name, const ExtensionRegistry &module);
 
   private:
     struct Function;

@@ -278,6 +278,20 @@ void test_extension_registry() {
                 value_evaluator.lookup("shown").to_string().find("point(2") ==
                     0,
             "custom extension value");
+
+    ExtensionRegistry math_module;
+    math_module.register_function(
+        "double", 1, [](const std::vector<Value> &arguments, SourceLocation) {
+            return Value(arguments[0].as_number() * 2);
+        });
+    ExtensionRegistry modules;
+    modules.register_module("math", math_module);
+    Evaluator module_evaluator(std::cout, modules);
+    require_error([&] { module_evaluator.evaluate("math.double(21)"); },
+                  RuntimeErrorCategory::UndefinedName, 1, 1);
+    module_evaluator.evaluate("import math; answer = math.double(21)");
+    require(number(module_evaluator, "answer") == 42,
+            "qualified module export");
 }
 } // namespace
 

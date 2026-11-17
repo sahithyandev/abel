@@ -39,6 +39,15 @@ struct VariableExpression final : Expression {
     std::string name;
 };
 
+struct MemberExpression final : Expression {
+    MemberExpression(SourceLocation location, ExpressionPtr object,
+                     std::string member)
+        : Expression(location), object(std::move(object)),
+          member(std::move(member)) {}
+    ExpressionPtr object;
+    std::string member;
+};
+
 struct ArrayExpression final : Expression {
     explicit ArrayExpression(SourceLocation location) : Expression(location) {}
     std::vector<ExpressionPtr> elements;
@@ -84,6 +93,12 @@ struct Statement {
     SourceLocation location;
 };
 using StatementPtr = std::unique_ptr<Statement>;
+
+struct ImportStatement final : Statement {
+    ImportStatement(SourceLocation location, std::string module)
+        : Statement(location), module(std::move(module)) {}
+    std::string module;
+};
 
 struct BlockStatement final : Statement {
     explicit BlockStatement(SourceLocation location) : Statement(location) {}

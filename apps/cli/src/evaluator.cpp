@@ -19,6 +19,7 @@ struct ExtensionRegistry::Function {
 
 struct ExtensionRegistry::State {
     std::unordered_map<std::string, Function> functions;
+    std::unordered_map<std::string, ExtensionRegistry> modules;
 };
 
 ExtensionRegistry::ExtensionRegistry() : state_(std::make_shared<State>()) {}
@@ -47,8 +48,23 @@ void ExtensionRegistry::register_function(std::string name, std::size_t arity,
         throw std::invalid_argument("extension function is already registered");
 }
 
+void ExtensionRegistry::register_module(std::string name,
+                                        const ExtensionRegistry &module) {
+    if (name.empty())
+        throw std::invalid_argument("extension module name cannot be empty");
+    const auto [_, inserted] = state_->modules.emplace(std::move(name), module);
+    if (!inserted)
+        throw std::invalid_argument("extension module is already registered");
+}
+
 bool ExtensionValue::equals(const ExtensionValue &other) const {
     return this == &other;
+}
+
+bool ExtensionValue::has_member(std::string_view) const { return false; }
+
+Value ExtensionValue::get_member(std::string_view, SourceLocation) const {
+    return Value();
 }
 
 struct Callable {
@@ -91,6 +107,29 @@ struct NativeCallable final : Callable {
     }
 };
 
+struct ModuleValue final : ExtensionValue {
+    explicit ModuleValue(std::unordered_map<std::string, Value> exports)
+        : exports(std::move(exports)) {}
+
+    std::string type_name() const override { return "module"; }
+    std::string to_string() const override { return "<module>"; }
+    bool has_member(std::string_view name) const override {
+        return exports.find(std::string(name)) != exports.end();
+    }
+    Value get_member(std::string_view name,
+                     SourceLocation location) const override {
+        const auto found = exports.find(std::string(name));
+        if (found == exports.end())
+            throw RuntimeError(RuntimeErrorCategory::UndefinedName,
+                               "module has no export '" + std::string(name) +
+                                   "'",
+                               location.line, location.column);
+        return found->second;
+    }
+
+    std::unordered_map<std::string, Value> exports;
+};
+
 struct UserCallable final : Callable {
     std::vector<std::string> parameters;
     const BlockStatement *body;
@@ -115,8 +154,10 @@ bool equal_values(const Value &left, const Value &right);
 
 class Runner {
   public:
-    Runner(std::ostream &output, std::shared_ptr<Environment> globals)
-        : globals_(std::move(globals)), environment_(globals_) {
+    Runner(std::ostream &output, std::shared_ptr<Environment> globals,
+           const std::unordered_map<std::string, Value> *modules)
+        : globals_(std::move(globals)), environment_(globals_),
+          modules_(modules) {
         (void)output;
     }
 
@@ -146,6 +187,17 @@ class Runner {
         if (auto *variable =
                 dynamic_cast<const VariableExpression *>(&expression))
             return lookup(variable->name, expression.location);
+        if (auto *member =
+                dynamic_cast<const MemberExpression *>(&expression)) {
+            Value object = expression_value(*member->object);
+            if (object.kind() != Value::Kind::Extension ||
+                !object.as_extension()->has_member(member->member))
+                fail(RuntimeErrorCategory::UndefinedName,
+                     "value has no member '" + member->member + "'",
+                     expression.location);
+            return object.as_extension()->get_member(member->member,
+                                                     expression.location);
+        }
         if (auto *array = dynamic_cast<const ArrayExpression *>(&expression)) {
             Array result;
             for (const auto &element : array->elements)
@@ -182,6 +234,16 @@ class Runner {
     void execute(const Statement &statement) {
         if (auto *block = dynamic_cast<const BlockStatement *>(&statement)) {
             execute_statements(block->statements);
+            return;
+        }
+        if (auto *imported =
+                dynamic_cast<const ImportStatement *>(&statement)) {
+            const auto found = modules_->find(imported->module);
+            if (found == modules_->end())
+                fail(RuntimeErrorCategory::UndefinedName,
+                     "undefined module '" + imported->module + "'",
+                     statement.location);
+            assign(imported->module, found->second);
             return;
         }
         if (auto *expr =
@@ -283,6 +345,7 @@ class Runner {
         Value value;
     };
     std::shared_ptr<Environment> globals_, environment_;
+    const std::unordered_map<std::string, Value> *modules_;
     bool in_function_ = false;
     Value expression_value(const Expression &e) { return expression(e); }
     [[noreturn]] void fail(RuntimeErrorCategory category,
@@ -493,6 +556,7 @@ RuntimeError::RuntimeError(RuntimeErrorCategory category, std::string message,
 struct Evaluator::State {
     std::shared_ptr<Environment> globals;
     std::ostream *output;
+    std::unordered_map<std::string, Value> modules;
     std::vector<std::shared_ptr<Program>> repl_programs;
 };
 
@@ -581,15 +645,28 @@ Evaluator::Evaluator(std::ostream &output, const ExtensionRegistry &extensions)
     for (const auto &[name, function] : extensions.state_->functions) {
         add(name, function.arity, function.function);
     }
+
+    for (const auto &[module_name, module] : extensions.state_->modules) {
+        std::unordered_map<std::string, Value> exports;
+        for (const auto &[name, function] : module.state_->functions) {
+            exports.emplace(name, Value(std::make_shared<NativeCallable>(
+                                      function.arity, function.function)));
+        }
+        state_->modules.emplace(
+            module_name,
+            Value(std::make_shared<ModuleValue>(std::move(exports))));
+    }
 }
 Evaluator::Evaluator() : Evaluator(std::cout) {}
 Value Evaluator::evaluate(const Program &program) {
-    return Runner(*state_->output, state_->globals).run(program);
+    return Runner(*state_->output, state_->globals, &state_->modules)
+        .run(program);
 }
 std::optional<Value> Evaluator::evaluate_repl(Program program) {
     auto retained = std::make_shared<Program>(std::move(program));
     const auto result =
-        Runner(*state_->output, state_->globals).run_repl(*retained);
+        Runner(*state_->output, state_->globals, &state_->modules)
+            .run_repl(*retained);
     state_->repl_programs.push_back(std::move(retained));
     return result;
 }
