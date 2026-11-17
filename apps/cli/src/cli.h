@@ -5,9 +5,9 @@
 
 namespace abel {
 
-int run_cli(int argc, char* argv[], std::istream& input, std::ostream& output,
-            std::ostream& error);
+int run_cli(int argc, char *argv[], std::istream &input, std::ostream &output,
+            std::ostream &error);
 
-}  // namespace abel
+} // namespace abel
 
-#endif  // ABEL_CLI_H
+#endif // ABEL_CLI_H

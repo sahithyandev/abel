@@ -8,9 +8,7 @@
 namespace abel {
 namespace {
 
-bool is_digit(char character) {
-    return character >= '0' && character <= '9';
-}
+bool is_digit(char character) { return character >= '0' && character <= '9'; }
 
 bool is_identifier_start(char character) {
     const unsigned char value = static_cast<unsigned char>(character);
@@ -44,14 +42,12 @@ std::string position_message(std::string message, std::size_t line,
     return output.str();
 }
 
-}  // namespace
+} // namespace
 
 LexError::LexError(LexErrorCategory category, std::string message,
                    std::size_t line, std::size_t column)
     : std::runtime_error(position_message(std::move(message), line, column)),
-      category_(category),
-      line_(line),
-      column_(column) {}
+      category_(category), line_(line), column_(column) {}
 
 std::vector<Token> tokenize(std::string_view source) {
     std::vector<Token> tokens;
@@ -70,9 +66,9 @@ std::vector<Token> tokenize(std::string_view source) {
 
     auto add_token = [&](TokenKind kind, std::size_t start,
                          std::size_t start_line, std::size_t start_column) {
-        tokens.push_back(
-            {kind, std::string(source.substr(start, index - start)), start_line,
-             start_column});
+        tokens.push_back({kind,
+                          std::string(source.substr(start, index - start)),
+                          start_line, start_column});
     };
 
     while (index < source.size()) {
@@ -177,8 +173,8 @@ std::vector<Token> tokenize(std::string_view source) {
                     advance(current);
                     if (index >= source.size()) {
                         throw LexError(LexErrorCategory::UnterminatedString,
-                                       "unterminated string literal", escape_line,
-                                       escape_column);
+                                       "unterminated string literal",
+                                       escape_line, escape_column);
                     }
                     const char escaped = source[index];
                     if (escaped != '\\' && escaped != '"' && escaped != 'n') {
@@ -203,74 +199,74 @@ std::vector<Token> tokenize(std::string_view source) {
         TokenKind kind;
         std::size_t length = 1;
         switch (character) {
-            case '(':
-                kind = TokenKind::LeftParen;
+        case '(':
+            kind = TokenKind::LeftParen;
+            break;
+        case ')':
+            kind = TokenKind::RightParen;
+            break;
+        case '[':
+            kind = TokenKind::LeftBracket;
+            break;
+        case ']':
+            kind = TokenKind::RightBracket;
+            break;
+        case '{':
+            kind = TokenKind::LeftBrace;
+            break;
+        case '}':
+            kind = TokenKind::RightBrace;
+            break;
+        case ',':
+            kind = TokenKind::Comma;
+            break;
+        case '=':
+            kind = TokenKind::Assign;
+            if (index + 1 < source.size() && source[index + 1] == '=') {
+                kind = TokenKind::EqualEqual;
+                length = 2;
+            }
+            break;
+        case '-':
+            kind = TokenKind::Minus;
+            break;
+        case '+':
+            kind = TokenKind::Plus;
+            break;
+        case '*':
+            kind = TokenKind::Star;
+            break;
+        case '/':
+            kind = TokenKind::Slash;
+            break;
+        case '%':
+            kind = TokenKind::Percent;
+            break;
+        case '<':
+            kind = TokenKind::Less;
+            if (index + 1 < source.size() && source[index + 1] == '=') {
+                kind = TokenKind::LessEqual;
+                length = 2;
+            }
+            break;
+        case '>':
+            kind = TokenKind::Greater;
+            if (index + 1 < source.size() && source[index + 1] == '=') {
+                kind = TokenKind::GreaterEqual;
+                length = 2;
+            }
+            break;
+        case '!':
+            if (index + 1 < source.size() && source[index + 1] == '=') {
+                kind = TokenKind::NotEqual;
+                length = 2;
                 break;
-            case ')':
-                kind = TokenKind::RightParen;
-                break;
-            case '[':
-                kind = TokenKind::LeftBracket;
-                break;
-            case ']':
-                kind = TokenKind::RightBracket;
-                break;
-            case '{':
-                kind = TokenKind::LeftBrace;
-                break;
-            case '}':
-                kind = TokenKind::RightBrace;
-                break;
-            case ',':
-                kind = TokenKind::Comma;
-                break;
-            case '=':
-                kind = TokenKind::Assign;
-                if (index + 1 < source.size() && source[index + 1] == '=') {
-                    kind = TokenKind::EqualEqual;
-                    length = 2;
-                }
-                break;
-            case '-':
-                kind = TokenKind::Minus;
-                break;
-            case '+':
-                kind = TokenKind::Plus;
-                break;
-            case '*':
-                kind = TokenKind::Star;
-                break;
-            case '/':
-                kind = TokenKind::Slash;
-                break;
-            case '%':
-                kind = TokenKind::Percent;
-                break;
-            case '<':
-                kind = TokenKind::Less;
-                if (index + 1 < source.size() && source[index + 1] == '=') {
-                    kind = TokenKind::LessEqual;
-                    length = 2;
-                }
-                break;
-            case '>':
-                kind = TokenKind::Greater;
-                if (index + 1 < source.size() && source[index + 1] == '=') {
-                    kind = TokenKind::GreaterEqual;
-                    length = 2;
-                }
-                break;
-            case '!':
-                if (index + 1 < source.size() && source[index + 1] == '=') {
-                    kind = TokenKind::NotEqual;
-                    length = 2;
-                    break;
-                }
-                throw LexError(LexErrorCategory::InvalidCharacter,
-                               "unexpected '!'; expected '!='", line, column);
-            default:
-                throw LexError(LexErrorCategory::InvalidCharacter,
-                               "unexpected character", line, column);
+            }
+            throw LexError(LexErrorCategory::InvalidCharacter,
+                           "unexpected '!'; expected '!='", line, column);
+        default:
+            throw LexError(LexErrorCategory::InvalidCharacter,
+                           "unexpected character", line, column);
         }
 
         for (std::size_t offset = 0; offset < length; ++offset) {
@@ -283,4 +279,4 @@ std::vector<Token> tokenize(std::string_view source) {
     return tokens;
 }
 
-}  // namespace abel
+} // namespace abel

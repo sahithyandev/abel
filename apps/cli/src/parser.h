@@ -12,7 +12,7 @@ namespace abel {
 enum class ParseErrorCategory { UnexpectedToken, InvalidAssignmentTarget };
 
 class ParseError : public std::runtime_error {
-public:
+  public:
     ParseError(ParseErrorCategory category, std::string message,
                std::size_t line, std::size_t column, bool incomplete = false);
     ParseErrorCategory category() const noexcept { return category_; }
@@ -20,16 +20,16 @@ public:
     std::size_t column() const noexcept { return column_; }
     bool incomplete() const noexcept { return incomplete_; }
 
-private:
+  private:
     ParseErrorCategory category_;
     std::size_t line_;
     std::size_t column_;
     bool incomplete_;
 };
 
-Program parse(const std::vector<Token>& tokens);
+Program parse(const std::vector<Token> &tokens);
 Program parse(std::string_view source);
 
-}  // namespace abel
+} // namespace abel
 
-#endif  // ABEL_PARSER_H
+#endif // ABEL_PARSER_H

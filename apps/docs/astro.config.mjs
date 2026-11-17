@@ -1,8 +1,8 @@
-import { defineConfig } from 'astro/config';
-import abelLanguage from './src/abel-language.mjs';
+import { defineConfig } from "astro/config";
+import abelLanguage from "./src/abel-language.mjs";
 
 export default defineConfig({
-  output: 'static',
+  output: "static",
   markdown: {
     shikiConfig: {
       langs: [abelLanguage],

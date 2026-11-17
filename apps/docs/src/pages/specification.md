@@ -315,15 +315,15 @@ matrix operations are not part of v0.1.
 
 The following functions are provided by the initial runtime:
 
-| Function | Behavior |
-| --- | --- |
-| `print(value)` | Writes a readable representation of `value`. Returns `null`. |
-| `length(value)` | Returns the length of a string or array. |
-| `sum(array)` | Returns the numeric sum of an array. |
-| `min(array)` | Returns the smallest numeric element of an array. |
-| `max(array)` | Returns the largest numeric element of an array. |
-| `abs(number)` | Returns the absolute value of a number. |
-| `sqrt(number)` | Returns the square root of a non-negative number. |
+| Function        | Behavior                                                     |
+| --------------- | ------------------------------------------------------------ |
+| `print(value)`  | Writes a readable representation of `value`. Returns `null`. |
+| `length(value)` | Returns the length of a string or array.                     |
+| `sum(array)`    | Returns the numeric sum of an array.                         |
+| `min(array)`    | Returns the smallest numeric element of an array.            |
+| `max(array)`    | Returns the largest numeric element of an array.             |
+| `abs(number)`   | Returns the absolute value of a number.                      |
+| `sqrt(number)`  | Returns the square root of a non-negative number.            |
 
 Calling a built-in with an unsupported type, an empty array where an element is
 required, or an invalid numeric value is a runtime error.
@@ -407,4 +407,3 @@ if average >= 80 {
     print("Average is below 80")
 }
 ```
-

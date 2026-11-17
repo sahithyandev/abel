@@ -48,15 +48,15 @@ abel> sqrt(81)
 
 The initial runtime includes these built-ins:
 
-| Function | Description |
-| --- | --- |
-| `print(value)` | Writes a readable value and returns `null`. |
-| `length(value)` | Returns the length of a string or array. |
-| `sum(array)` | Returns the numeric sum of an array. |
-| `min(array)` | Returns the smallest numeric element. |
-| `max(array)` | Returns the largest numeric element. |
-| `abs(number)` | Returns the absolute value of a number. |
-| `sqrt(number)` | Returns the square root of a non-negative number. |
+| Function        | Description                                       |
+| --------------- | ------------------------------------------------- |
+| `print(value)`  | Writes a readable value and returns `null`.       |
+| `length(value)` | Returns the length of a string or array.          |
+| `sum(array)`    | Returns the numeric sum of an array.              |
+| `min(array)`    | Returns the smallest numeric element.             |
+| `max(array)`    | Returns the largest numeric element.              |
+| `abs(number)`   | Returns the absolute value of a number.           |
+| `sqrt(number)`  | Returns the square root of a non-negative number. |
 
 ## Run source in other ways
 

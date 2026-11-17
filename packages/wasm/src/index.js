@@ -1,4 +1,4 @@
-const DEFAULT_BASE_URL = '/wasm/';
+const DEFAULT_BASE_URL = "/wasm/";
 
 /**
  * Load the Emscripten module produced by the package build.
@@ -6,7 +6,7 @@ const DEFAULT_BASE_URL = '/wasm/';
  * during the docs preparation step.
  */
 export async function createAbelRuntime({ baseUrl = DEFAULT_BASE_URL } = {}) {
-  const normalizedBase = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
+  const normalizedBase = baseUrl.endsWith("/") ? baseUrl : `${baseUrl}/`;
   const moduleUrl = `${normalizedBase}abel.js`;
   const wasmUrl = `${normalizedBase}abel.wasm`;
   const response = await fetch(moduleUrl);
@@ -16,11 +16,12 @@ export async function createAbelRuntime({ baseUrl = DEFAULT_BASE_URL } = {}) {
 
   // Keep this import outside Vite's static dependency graph. The generated
   // ESM file lives in `public/wasm` and must be fetched by the browser as-is.
-  const loadModule = new Function('url', 'return import(url);');
+  const loadModule = new Function("url", "return import(url);");
   const module = await loadModule(moduleUrl);
   const factory = module.default ?? module;
   return factory({
-    locateFile: (file) => file.endsWith('.wasm') ? wasmUrl : `${normalizedBase}${file}`,
+    locateFile: (file) =>
+      file.endsWith(".wasm") ? wasmUrl : `${normalizedBase}${file}`,
   });
 }
 

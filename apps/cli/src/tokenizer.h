@@ -68,15 +68,15 @@ enum class LexErrorCategory {
 };
 
 class LexError : public std::runtime_error {
-public:
-    LexError(LexErrorCategory category, std::string message,
-             std::size_t line, std::size_t column);
+  public:
+    LexError(LexErrorCategory category, std::string message, std::size_t line,
+             std::size_t column);
 
     LexErrorCategory category() const noexcept { return category_; }
     std::size_t line() const noexcept { return line_; }
     std::size_t column() const noexcept { return column_; }
 
-private:
+  private:
     LexErrorCategory category_;
     std::size_t line_;
     std::size_t column_;
@@ -84,6 +84,6 @@ private:
 
 std::vector<Token> tokenize(std::string_view source);
 
-}  // namespace abel
+} // namespace abel
 
-#endif  // ABEL_TOKENIZER_H
+#endif // ABEL_TOKENIZER_H

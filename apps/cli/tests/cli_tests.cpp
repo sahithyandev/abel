@@ -7,7 +7,7 @@
 
 namespace {
 
-void require(bool condition, const std::string& message) {
+void require(bool condition, const std::string &message) {
     if (!condition) {
         std::cerr << "FAIL: " << message << '\n';
         std::exit(EXIT_FAILURE);
@@ -16,7 +16,7 @@ void require(bool condition, const std::string& message) {
 
 void test_help_and_version() {
     char help[] = "--help";
-    char* help_args[] = {const_cast<char*>("abel"), help};
+    char *help_args[] = {const_cast<char *>("abel"), help};
     std::istringstream input;
     std::ostringstream output;
     std::ostringstream error;
@@ -26,7 +26,7 @@ void test_help_and_version() {
             "help output");
 
     char version[] = "--version";
-    char* version_args[] = {const_cast<char*>("abel"), version};
+    char *version_args[] = {const_cast<char *>("abel"), version};
     output.str("");
     require(abel::run_cli(2, version_args, input, output, error) == 0,
             "version exit code");
@@ -35,7 +35,7 @@ void test_help_and_version() {
 
 void test_stdin_script() {
     char dash[] = "-";
-    char* args[] = {const_cast<char*>("abel"), dash};
+    char *args[] = {const_cast<char *>("abel"), dash};
     std::istringstream input("1 + 2\nprint(4)\n");
     std::ostringstream output;
     std::ostringstream error;
@@ -46,13 +46,12 @@ void test_stdin_script() {
 }
 
 void test_repl_state_and_multiline() {
-    char* args[] = {const_cast<char*>("abel")};
-    std::istringstream input(
-        "value = 5\n"
-        "fn twice(value) {\n"
-        "  return value * 2\n"
-        "}\n"
-        "twice(value)\n");
+    char *args[] = {const_cast<char *>("abel")};
+    std::istringstream input("value = 5\n"
+                             "fn twice(value) {\n"
+                             "  return value * 2\n"
+                             "}\n"
+                             "twice(value)\n");
     std::ostringstream output;
     std::ostringstream error;
     require(abel::run_cli(1, args, input, output, error) == 0,
@@ -63,7 +62,7 @@ void test_repl_state_and_multiline() {
 
 void test_errors() {
     char dash[] = "-";
-    char* args[] = {const_cast<char*>("abel"), dash};
+    char *args[] = {const_cast<char *>("abel"), dash};
     std::istringstream input("missing\n");
     std::ostringstream output;
     std::ostringstream error;
@@ -73,7 +72,7 @@ void test_errors() {
             "runtime error diagnostic");
 
     char unknown[] = "--unknown";
-    char* unknown_args[] = {const_cast<char*>("abel"), unknown};
+    char *unknown_args[] = {const_cast<char *>("abel"), unknown};
     output.str("");
     error.str("");
     require(abel::run_cli(2, unknown_args, input, output, error) == 2,
@@ -82,7 +81,7 @@ void test_errors() {
             "unknown option diagnostic");
 }
 
-}  // namespace
+} // namespace
 
 int main() {
     test_help_and_version();

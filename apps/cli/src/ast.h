@@ -25,8 +25,9 @@ using ExpressionPtr = std::unique_ptr<Expression>;
 
 struct LiteralExpression final : Expression {
     enum class Kind { Number, String, Boolean, Null };
-    LiteralExpression(SourceLocation location, Kind kind,
-                      std::variant<double, std::string, bool, std::monostate> value)
+    LiteralExpression(
+        SourceLocation location, Kind kind,
+        std::variant<double, std::string, bool, std::monostate> value)
         : Expression(location), kind(kind), value(std::move(value)) {}
     Kind kind;
     std::variant<double, std::string, bool, std::monostate> value;
@@ -44,7 +45,8 @@ struct ArrayExpression final : Expression {
 };
 
 struct UnaryExpression final : Expression {
-    UnaryExpression(SourceLocation location, TokenKind op, ExpressionPtr operand)
+    UnaryExpression(SourceLocation location, TokenKind op,
+                    ExpressionPtr operand)
         : Expression(location), op(op), operand(std::move(operand)) {}
     TokenKind op;
     ExpressionPtr operand;
@@ -97,7 +99,8 @@ struct ExpressionStatement final : Statement {
 struct AssignmentStatement final : Statement {
     AssignmentStatement(SourceLocation location, ExpressionPtr target,
                         ExpressionPtr value)
-        : Statement(location), target(std::move(target)), value(std::move(value)) {}
+        : Statement(location), target(std::move(target)),
+          value(std::move(value)) {}
     ExpressionPtr target;
     ExpressionPtr value;
 };
@@ -152,6 +155,6 @@ struct Program {
     std::vector<StatementPtr> statements;
 };
 
-}  // namespace abel
+} // namespace abel
 
-#endif  // ABEL_AST_H
+#endif // ABEL_AST_H

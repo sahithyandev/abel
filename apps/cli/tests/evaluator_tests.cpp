@@ -9,21 +9,27 @@
 namespace {
 using namespace abel;
 
-void require(bool condition, const std::string& message) {
-    if (!condition) { std::cerr << "FAIL: " << message << '\n'; std::exit(EXIT_FAILURE); }
+void require(bool condition, const std::string &message) {
+    if (!condition) {
+        std::cerr << "FAIL: " << message << '\n';
+        std::exit(EXIT_FAILURE);
+    }
 }
 
-double number(const Evaluator& evaluator, const std::string& name) {
+double number(const Evaluator &evaluator, const std::string &name) {
     return evaluator.lookup(name).as_number();
 }
 
 template <typename Function>
-void require_error(Function function, RuntimeErrorCategory category, std::size_t line = 1,
-                   std::size_t column = 1) {
-    try { function(); }
-    catch (const RuntimeError& error) {
-        require(error.category() == category, "unexpected runtime error category");
-        require(error.line() == line && error.column() == column, "unexpected runtime error location");
+void require_error(Function function, RuntimeErrorCategory category,
+                   std::size_t line = 1, std::size_t column = 1) {
+    try {
+        function();
+    } catch (const RuntimeError &error) {
+        require(error.category() == category,
+                "unexpected runtime error category");
+        require(error.line() == line && error.column() == column,
+                "unexpected runtime error location");
         return;
     }
     require(false, "expected runtime error");
@@ -40,9 +46,15 @@ void test_values_and_operators() {
         zero_is_true = 0
         empty_is_true = ""
     )abel");
-    require(number(evaluator, "a") == 14 && number(evaluator, "b") == 20, "arithmetic precedence");
-    require(number(evaluator, "c") == -14 && evaluator.lookup("text").as_string() == "Abel runtime", "unary and string arithmetic");
-    require(evaluator.lookup("truth").as_boolean() && evaluator.lookup("zero_is_true").truthy() && evaluator.lookup("empty_is_true").truthy(), "truthiness and logic");
+    require(number(evaluator, "a") == 14 && number(evaluator, "b") == 20,
+            "arithmetic precedence");
+    require(number(evaluator, "c") == -14 &&
+                evaluator.lookup("text").as_string() == "Abel runtime",
+            "unary and string arithmetic");
+    require(evaluator.lookup("truth").as_boolean() &&
+                evaluator.lookup("zero_is_true").truthy() &&
+                evaluator.lookup("empty_is_true").truthy(),
+            "truthiness and logic");
 }
 
 void test_control_flow_and_arrays() {
@@ -57,9 +69,13 @@ void test_control_flow_and_arrays() {
         selected = values[1]
         if total > 10 { branch = "then" } else { branch = "else" }
     )abel");
-    require(number(evaluator, "total") == 66 && number(evaluator, "selected") == 8, "loops and array mutation");
-    require(evaluator.lookup("branch").as_string() == "then", "conditional branch");
-    require(evaluator.lookup("values").as_array()[0].as_number() == 1, "loop variable does not mutate array");
+    require(number(evaluator, "total") == 66 &&
+                number(evaluator, "selected") == 8,
+            "loops and array mutation");
+    require(evaluator.lookup("branch").as_string() == "then",
+            "conditional branch");
+    require(evaluator.lookup("values").as_array()[0].as_number() == 1,
+            "loop variable does not mutate array");
 }
 
 void test_functions_closures_and_recursion() {
@@ -74,7 +90,10 @@ void test_functions_closures_and_recursion() {
         set_base(3)
         second = add_base(5)
     )abel");
-    require(number(evaluator, "first") == 15 && number(evaluator, "fact") == 120 && number(evaluator, "second") == 8, "closures and recursion");
+    require(number(evaluator, "first") == 15 &&
+                number(evaluator, "fact") == 120 &&
+                number(evaluator, "second") == 8,
+            "closures and recursion");
 }
 
 void test_builtins_and_output() {
@@ -92,30 +111,81 @@ void test_builtins_and_output() {
         print(values)
         print(null)
     )abel");
-    require(number(evaluator, "size") == 3 && number(evaluator, "text_size") == 5, "length builtin");
-    require(number(evaluator, "total") == 14 && number(evaluator, "low") == 1 && number(evaluator, "high") == 9, "array builtins");
-    require(number(evaluator, "distance") == 3 && number(evaluator, "root") == 3, "numeric builtins");
+    require(number(evaluator, "size") == 3 &&
+                number(evaluator, "text_size") == 5,
+            "length builtin");
+    require(number(evaluator, "total") == 14 && number(evaluator, "low") == 1 &&
+                number(evaluator, "high") == 9,
+            "array builtins");
+    require(number(evaluator, "distance") == 3 &&
+                number(evaluator, "root") == 3,
+            "numeric builtins");
     require(output.str() == "[4, 1, 9]\nnull\n", "print output");
 }
 
 void test_equality_and_short_circuit() {
     Evaluator evaluator;
-    evaluator.evaluate("same = [1, [2]] == [1, [2]]; different = [1] != [2]; safe = false and missing; also_safe = true or missing");
-    require(evaluator.lookup("same").as_boolean() && evaluator.lookup("different").as_boolean(), "deep equality");
-    require(!evaluator.lookup("safe").as_boolean() && evaluator.lookup("also_safe").as_boolean(), "short circuit");
+    evaluator.evaluate("same = [1, [2]] == [1, [2]]; different = [1] != [2]; "
+                       "safe = false and missing; also_safe = true or missing");
+    require(evaluator.lookup("same").as_boolean() &&
+                evaluator.lookup("different").as_boolean(),
+            "deep equality");
+    require(!evaluator.lookup("safe").as_boolean() &&
+                evaluator.lookup("also_safe").as_boolean(),
+            "short circuit");
 }
 
 void test_errors() {
-    require_error([] { Evaluator e; e.evaluate("missing"); }, RuntimeErrorCategory::UndefinedName, 1, 1);
-    require_error([] { Evaluator e; e.evaluate("1 / 0"); }, RuntimeErrorCategory::DivisionByZero, 1, 3);
-    require_error([] { Evaluator e; e.evaluate("x = [1]; x[1]"); }, RuntimeErrorCategory::InvalidIndex, 1, 10);
-    require_error([] { Evaluator e; e.evaluate("x = 1; x()"); }, RuntimeErrorCategory::NotCallable, 1, 8);
-    require_error([] { Evaluator e; e.evaluate("print()"); }, RuntimeErrorCategory::ArityMismatch, 1, 1);
-    require_error([] { Evaluator e; e.evaluate("return 1"); }, RuntimeErrorCategory::ReturnOutsideFunction, 1, 1);
-    require_error([] { Evaluator e; e.evaluate("sqrt(-1)"); }, RuntimeErrorCategory::InvalidArgument, 1, 1);
-    require_error([] { Evaluator e; e.evaluate("sum([1, true])"); }, RuntimeErrorCategory::TypeError, 1, 1);
+    require_error(
+        [] {
+            Evaluator e;
+            e.evaluate("missing");
+        },
+        RuntimeErrorCategory::UndefinedName, 1, 1);
+    require_error(
+        [] {
+            Evaluator e;
+            e.evaluate("1 / 0");
+        },
+        RuntimeErrorCategory::DivisionByZero, 1, 3);
+    require_error(
+        [] {
+            Evaluator e;
+            e.evaluate("x = [1]; x[1]");
+        },
+        RuntimeErrorCategory::InvalidIndex, 1, 10);
+    require_error(
+        [] {
+            Evaluator e;
+            e.evaluate("x = 1; x()");
+        },
+        RuntimeErrorCategory::NotCallable, 1, 8);
+    require_error(
+        [] {
+            Evaluator e;
+            e.evaluate("print()");
+        },
+        RuntimeErrorCategory::ArityMismatch, 1, 1);
+    require_error(
+        [] {
+            Evaluator e;
+            e.evaluate("return 1");
+        },
+        RuntimeErrorCategory::ReturnOutsideFunction, 1, 1);
+    require_error(
+        [] {
+            Evaluator e;
+            e.evaluate("sqrt(-1)");
+        },
+        RuntimeErrorCategory::InvalidArgument, 1, 1);
+    require_error(
+        [] {
+            Evaluator e;
+            e.evaluate("sum([1, true])");
+        },
+        RuntimeErrorCategory::TypeError, 1, 1);
 }
-}  // namespace
+} // namespace
 
 int main() {
     test_values_and_operators();
