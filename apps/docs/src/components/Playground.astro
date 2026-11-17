@@ -20,8 +20,14 @@ scores = [72, 81, 95]
 print(mean(scores))</textarea>
       </div>
       <div class="playground-controls">
-        <button class="button button-dark" type="submit" data-run>Run <span>↗</span></button>
-        <button class="button button-light" type="button" data-clear>Reset example</button>
+        <button class="button button-dark" type="submit" data-run>
+          <i class="button-icon" data-lucide="play" aria-hidden="true"></i>
+          <span>Run</span>
+        </button>
+        <button class="button button-light" type="button" data-clear>
+          <i class="button-icon" data-lucide="rotate-ccw" aria-hidden="true"></i>
+          <span>Reset example</span>
+        </button>
       </div>
     </form>
 
@@ -37,7 +43,10 @@ print(mean(scores))</textarea>
 
 <script>
   import { createAbelRuntime } from '@abel/wasm';
+  import { createIcons, Play, RotateCcw } from 'lucide';
   const wasmBaseUrl = `${import.meta.env.BASE_URL}wasm/`;
+
+  createIcons({ icons: { Play, RotateCcw } });
 
   const form = document.querySelector('[data-playground-form]');
   const source = document.querySelector('[data-source]');
@@ -163,14 +172,16 @@ print(mean(scores))</textarea>
   :global(.token-number) { color:#b9c98b; }
   :global(.token-operator),:global(.token-punctuation) { color:#d6dde0; }
   .playground-controls { display:flex; gap:10px; margin-top:14px; }
-  .playground-controls .button { cursor:pointer; }
+  .playground-controls .button { display:inline-flex; align-items:center; gap:10px; cursor:pointer; }
+  .playground-controls .button-dark span { margin-left:0; color:inherit; }
+  .button-icon { width:16px; height:16px; flex:none; }
   .playground-controls .button:disabled { cursor:wait; opacity:.55; }
   .playground-output { display:flex; flex-direction:column; min-height:0; }
   .playground-output-heading { display:flex; align-items:baseline; justify-content:space-between; }
   .playground-output-heading span { color:var(--muted); font:11px ui-monospace,SFMono-Regular,monospace; }
-  .playground-output pre { min-height:0; flex:1; overflow:auto; background:#e5e9eb; color:var(--ink); white-space:pre-wrap; overflow-wrap:anywhere; }
-  .playground-output pre[data-state='error'] { color:#7d301f; background:#f0e1dd; }
-  .playground-output pre[data-state='success'] { background:#e4ece6; }
+  .playground-output pre { min-height:0; flex:1; overflow:auto; margin:0; padding:24px; border:1px solid var(--line); border-radius:3px; background:#20272b; color:var(--ink); white-space:pre-wrap; overflow-wrap:anywhere; }
+  .playground-output pre[data-state='error'] { color:#ffb09f; background:#2b2021; }
+  .playground-output pre[data-state='success'] { background:#20272b; }
   @media (max-width:700px) {
     :global(.wide-shell) { padding:0; }
     .playground { min-height:0; padding:80px 6vw 90px; }
