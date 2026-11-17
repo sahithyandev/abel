@@ -4,8 +4,8 @@ Abel is an early-stage, lightweight scripting language for numerical
 computing. It is designed to be small, readable, and useful for experimenting
 with numbers, arrays, and simple programs.
 
-This repository is a monorepo containing the language CLI and its
-documentation website.
+This repository is a monorepo containing the language CLI, a shared WebAssembly
+runtime, a browser documentation site, and a Tauri desktop notebook app.
 
 ## Try Abel
 
@@ -84,6 +84,7 @@ apps/
   cli/       C++ interpreter, CLI, and tests
   wasm/      Emscripten browser adapter
   docs/      static documentation site and language spec source
+  desktop/   Tauri 2 + Preact desktop notebook app
 packages/
   wasm/      private browser-runtime package consumed by the docs site
 ```
@@ -128,6 +129,7 @@ make cli       # compile the native CLI
 make test      # compile and run the C++ tests
 make wasm      # build the WebAssembly runtime
 make docs      # build the documentation site
+make desktop   # start the Tauri desktop app locally
 make run ARGS=program.abel
 ```
 
@@ -141,6 +143,20 @@ Run Abel with:
 
 With no file argument, Abel starts an interactive REPL. Use `-` to read source
 from standard input.
+
+## Run the desktop app
+
+The desktop app is a Tauri 2 + Preact notebook shell using the same WebAssembly
+runtime as the browser playground. Install its JavaScript dependencies, then
+start it from the repository root with:
+
+```sh
+bun install --cwd apps/desktop
+make desktop
+```
+
+The app opens in a native desktop window. To build the frontend without
+launching Tauri, run `bun --cwd apps/desktop run build`.
 
 ## Run the documentation site
 

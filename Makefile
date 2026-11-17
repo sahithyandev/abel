@@ -6,7 +6,7 @@ RUSTFMT ?= rustfmt
 
 .DEFAULT_GOAL := help
 
-.PHONY: help configure cli build test wasm docs docs-dev fmt run clean setup-hooks
+.PHONY: help configure cli build test wasm docs docs-dev desktop fmt run clean setup-hooks
 
 help:
 	@printf '%s\n' \
@@ -17,6 +17,7 @@ help:
 		'  make wasm      Build the WebAssembly runtime' \
 		'  make docs      Build the documentation site' \
 		'  make docs-dev  Start the documentation site locally' \
+		'  make desktop   Start the Tauri desktop app locally' \
 		'  make run ARGS="file.abel"  Run the compiled CLI' \
 		'  make setup-hooks Enable the repository Git hooks' \
 		'  make clean     Remove native build outputs'
@@ -58,13 +59,16 @@ test: configure
 	ctest --test-dir $(BUILD_DIR) --output-on-failure
 
 wasm:
-	$(BUN) --cwd packages/wasm run build
+	$(BUN) run --cwd packages/wasm build
 
 docs:
 	$(BUN) run --cwd apps/docs build
 
 docs-dev:
 	$(BUN) run --cwd apps/docs dev
+
+desktop:
+	$(BUN) run --cwd apps/desktop tauri dev
 
 run: cli
 	$(BUILD_DIR)/apps/cli/abel $(ARGS)
