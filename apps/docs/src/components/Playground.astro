@@ -37,6 +37,7 @@ print(mean(scores))</textarea>
 
 <script>
   import { createAbelRuntime } from '@abel/wasm';
+  const wasmBaseUrl = `${import.meta.env.BASE_URL}wasm/`;
 
   const form = document.querySelector('[data-playground-form]');
   const source = document.querySelector('[data-source]');
@@ -88,7 +89,7 @@ print(mean(scores))</textarea>
   };
 
   const loadRuntime = () => {
-    runtimePromise ??= createAbelRuntime();
+    runtimePromise ??= createAbelRuntime({ baseUrl: wasmBaseUrl });
     return runtimePromise;
   };
 

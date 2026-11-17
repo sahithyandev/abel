@@ -1,6 +1,7 @@
 ---
 import '../styles/global.css';
 
+const base = import.meta.env.BASE_URL;
 const { frontmatter = {}, title: directTitle, description: directDescription, showToc: directShowToc = false, wide = false } = Astro.props;
 const title = frontmatter.title ?? directTitle ?? 'Abel — Language documentation';
 const description = frontmatter.description ?? directDescription ?? 'The Abel programming language documentation.';
@@ -20,11 +21,11 @@ const showToc = frontmatter.showToc ?? directShowToc;
   </head>
   <body class:list={{ 'playground-page': wide }}>
     <header class="site-header">
-      <a class="wordmark" href="/">abel<span>.</span></a>
+      <a class="wordmark" href={base}>abel<span>.</span></a>
       <nav aria-label="Primary navigation">
-        <a href="/playground/">Playground</a>
-        <a href="/specification/">Language spec</a>
-        <a href="/#about">About Abel</a>
+        <a href={`${base}playground/`}>Playground</a>
+        <a href={`${base}specification/`}>Language spec</a>
+        <a href={`${base}#about`}>About Abel</a>
       </nav>
     </header>
     <main class:list={{ 'docs-shell': showToc, 'page-shell': !showToc, 'wide-shell': wide }}>
