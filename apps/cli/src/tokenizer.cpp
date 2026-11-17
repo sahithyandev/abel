@@ -23,9 +23,10 @@ bool is_identifier_part(char character) {
 TokenKind keyword_kind(std::string_view word) {
     static const std::unordered_map<std::string_view, TokenKind> keywords = {
         {"and", TokenKind::And},       {"else", TokenKind::Else},
-        {"false", TokenKind::False},   {"for", TokenKind::For},
-        {"fn", TokenKind::Fn},         {"if", TokenKind::If},
-        {"in", TokenKind::In},         {"not", TokenKind::Not},
+        {"export", TokenKind::Export}, {"false", TokenKind::False},
+        {"for", TokenKind::For},       {"fn", TokenKind::Fn},
+        {"if", TokenKind::If},         {"in", TokenKind::In},
+        {"import", TokenKind::Import}, {"not", TokenKind::Not},
         {"null", TokenKind::Null},     {"or", TokenKind::Or},
         {"return", TokenKind::Return}, {"true", TokenKind::True},
         {"while", TokenKind::While},
@@ -219,6 +220,9 @@ std::vector<Token> tokenize(std::string_view source) {
             break;
         case ',':
             kind = TokenKind::Comma;
+            break;
+        case '.':
+            kind = TokenKind::Dot;
             break;
         case '=':
             kind = TokenKind::Assign;

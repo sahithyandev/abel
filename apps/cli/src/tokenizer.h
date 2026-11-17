@@ -16,11 +16,13 @@ enum class TokenKind {
 
     And,
     Else,
+    Export,
     False,
     For,
     Fn,
     If,
     In,
+    Import,
     Not,
     Null,
     Or,
@@ -38,6 +40,7 @@ enum class TokenKind {
     LeftBrace,
     RightBrace,
     Comma,
+    Dot,
 
     Assign,
     Minus,

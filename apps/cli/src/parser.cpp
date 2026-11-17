@@ -71,6 +71,11 @@ class Parser {
     }
 
     StatementPtr parse_statement() {
+        if (match(TokenKind::Export))
+            return std::make_unique<ExportStatement>(location(previous()),
+                                                     parse_statement());
+        if (match(TokenKind::Import))
+            return parse_import(previous());
         if (match(TokenKind::LeftBrace))
             return parse_block_after_open(previous());
         if (match(TokenKind::If))
@@ -169,6 +174,13 @@ class Parser {
         }
         return std::make_unique<ReturnStatement>(location(start),
                                                  parse_expression());
+    }
+
+    StatementPtr parse_import(const Token &start) {
+        const Token &module = consume(TokenKind::Identifier,
+                                      "expected module name after 'import'");
+        return std::make_unique<ImportStatement>(location(start),
+                                                 module.lexeme);
     }
 
     StatementPtr parse_expression_or_assignment() {
@@ -276,6 +288,11 @@ class Parser {
                 expression = std::make_unique<IndexExpression>(
                     expression->location, std::move(expression),
                     std::move(index));
+            } else if (match(TokenKind::Dot)) {
+                const Token &member = consume(TokenKind::Identifier,
+                                              "expected member name after '.'");
+                expression = std::make_unique<MemberExpression>(
+                    expression->location, std::move(expression), member.lexeme);
             } else {
                 break;
             }

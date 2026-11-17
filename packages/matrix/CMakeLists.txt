@@ -1,0 +1,17 @@
+add_library(abel_matrix src/matrix.cpp)
+target_include_directories(abel_matrix PUBLIC include)
+target_compile_features(abel_matrix PUBLIC cxx_std_17)
+target_link_libraries(abel_matrix PUBLIC abel_evaluator)
+
+if (MSVC)
+    target_compile_options(abel_matrix PRIVATE /W4)
+else()
+    target_compile_options(abel_matrix PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+
+if (BUILD_TESTING AND ABEL_BUILD_CLI)
+    add_executable(abel_matrix_tests tests/matrix_tests.cpp)
+    target_compile_features(abel_matrix_tests PRIVATE cxx_std_17)
+    target_link_libraries(abel_matrix_tests PRIVATE abel_matrix)
+    add_test(NAME abel_matrix_tests COMMAND abel_matrix_tests)
+endif()

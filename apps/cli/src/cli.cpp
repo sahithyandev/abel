@@ -4,11 +4,14 @@
 #include "parser.h"
 #include "tokenizer.h"
 
+#include <cstdint>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <sstream>
 #include <string>
 #include <utility>
+#include <vector>
 
 #if defined(_WIN32)
 #include <io.h>
@@ -20,6 +23,136 @@ namespace abel {
 namespace {
 
 constexpr const char *kVersion = "0.1.0";
+constexpr std::uintmax_t kMaxModuleSourceSize = 1024 * 1024;
+constexpr std::uintmax_t kMaxManifestSize = 64 * 1024;
+
+std::string trim(std::string value) {
+    const auto first = value.find_first_not_of(" \t\r\n");
+    if (first == std::string::npos)
+        return {};
+    const auto last = value.find_last_not_of(" \t\r\n");
+    return value.substr(first, last - first + 1);
+}
+
+std::optional<std::string> quoted_manifest_value(const std::string &line,
+                                                 const std::string &key) {
+    const std::string prefix = key + " = \"";
+    if (line.rfind(prefix, 0) != 0 || line.size() < prefix.size() + 1 ||
+        line.back() != '"')
+        return std::nullopt;
+    return line.substr(prefix.size(), line.size() - prefix.size() - 1);
+}
+
+std::optional<std::filesystem::path>
+manifest_entry(const std::filesystem::path &package_root,
+               std::string_view module) {
+    const auto manifest_path = package_root / "abel.toml";
+    std::error_code error;
+    if (!std::filesystem::is_regular_file(manifest_path, error) || error ||
+        std::filesystem::file_size(manifest_path, error) > kMaxManifestSize ||
+        error)
+        return std::nullopt;
+    std::ifstream manifest(manifest_path);
+    if (!manifest)
+        return std::nullopt;
+
+    std::string line;
+    bool in_package = false;
+    std::optional<std::string> name;
+    std::optional<std::string> entry;
+    while (std::getline(manifest, line)) {
+        line = trim(line);
+        if (line.empty() || line.front() == '#')
+            continue;
+        if (line.front() == '[') {
+            in_package = line == "[package]";
+            continue;
+        }
+        if (!in_package)
+            continue;
+        if (const auto value = quoted_manifest_value(line, "name"))
+            name = value;
+        else if (const auto value = quoted_manifest_value(line, "entry"))
+            entry = value;
+    }
+    if (!name || !entry || *name != module || entry->empty())
+        return std::nullopt;
+    return package_root / *entry;
+}
+
+class FileModuleResolver final : public ModuleResolver {
+  public:
+    explicit FileModuleResolver(std::vector<std::filesystem::path> roots)
+        : roots_(std::move(roots)) {}
+
+    std::optional<ModuleSource> resolve(std::string_view module,
+                                        SourceLocation) override {
+        for (const auto &root : roots_) {
+            const auto root_path = std::filesystem::weakly_canonical(root);
+            const auto package_root = root_path / std::string(module);
+            if (const auto entry = manifest_entry(package_root, module);
+                entry && inside(root_path, *entry)) {
+                std::error_code error;
+                if (std::filesystem::is_regular_file(*entry, error) && !error &&
+                    std::filesystem::file_size(*entry, error) <=
+                        kMaxModuleSourceSize &&
+                    !error) {
+                    std::ifstream file(*entry);
+                    if (file) {
+                        std::ostringstream source;
+                        source << file.rdbuf();
+                        return ModuleSource{source.str()};
+                    }
+                }
+            }
+            for (const auto &candidate :
+                 {root_path / (std::string(module) + ".abel"),
+                  root_path / std::string(module) / "module.abel"}) {
+                std::error_code error;
+                if (!std::filesystem::is_regular_file(candidate, error) ||
+                    error ||
+                    std::filesystem::file_size(candidate, error) >
+                        kMaxModuleSourceSize ||
+                    error || !inside(root_path, candidate))
+                    continue;
+                std::ifstream file(candidate);
+                if (!file)
+                    continue;
+                std::ostringstream source;
+                source << file.rdbuf();
+                return ModuleSource{source.str()};
+            }
+        }
+        return std::nullopt;
+    }
+
+  private:
+    static bool inside(const std::filesystem::path &root,
+                       const std::filesystem::path &candidate) {
+        const auto canonical = std::filesystem::weakly_canonical(candidate);
+        auto root_it = root.begin();
+        auto candidate_it = canonical.begin();
+        for (; root_it != root.end() && candidate_it != canonical.end();
+             ++root_it, ++candidate_it)
+            if (*root_it != *candidate_it)
+                return false;
+        return root_it == root.end();
+    }
+
+    std::vector<std::filesystem::path> roots_;
+};
+
+std::shared_ptr<ModuleResolver>
+file_resolver_for(const std::filesystem::path &source_path) {
+    std::error_code error;
+    const auto current = std::filesystem::current_path(error);
+    std::vector<std::filesystem::path> roots;
+    if (!error)
+        roots.push_back(current);
+    if (!source_path.empty() && source_path.has_parent_path())
+        roots.push_back(source_path.parent_path());
+    return std::make_shared<FileModuleResolver>(std::move(roots));
+}
 
 void usage(std::ostream &out) {
     out << "Usage: abel [--help] [--version] [FILE|-]\n"
@@ -93,7 +226,8 @@ bool terminal_input(std::istream &input) {
 int run_source(const std::string &source, const std::string &source_name,
                std::ostream &output, std::ostream &error) {
     try {
-        Evaluator evaluator(output);
+        Evaluator evaluator(output, ExtensionRegistry{},
+                            file_resolver_for(source_name));
         evaluator.evaluate(source);
         return 0;
     } catch (const LexError &exception) {
@@ -107,7 +241,8 @@ int run_source(const std::string &source, const std::string &source_name,
 }
 
 int run_repl(std::istream &input, std::ostream &output, std::ostream &error) {
-    Evaluator evaluator(output);
+    Evaluator evaluator(output, ExtensionRegistry{},
+                        file_resolver_for(std::filesystem::path{}));
     std::string buffer;
     std::string line;
     bool interactive = terminal_input(input);

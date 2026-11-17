@@ -6,10 +6,83 @@
 #include <iostream>
 #include <limits>
 #include <sstream>
+#include <stdexcept>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 
 namespace abel {
+
+struct ExtensionRegistry::Function {
+    std::size_t arity;
+    NativeFunction function;
+};
+
+struct ExtensionRegistry::State {
+    std::unordered_map<std::string, Function> functions;
+    std::unordered_map<std::string, ExtensionRegistry> modules;
+};
+
+ExtensionRegistry::ExtensionRegistry() : state_(std::make_shared<State>()) {}
+ExtensionRegistry::ExtensionRegistry(const ExtensionRegistry &other)
+    : state_(std::make_shared<State>(*other.state_)) {}
+ExtensionRegistry &
+ExtensionRegistry::operator=(const ExtensionRegistry &other) {
+    if (this != &other)
+        state_ = std::make_shared<State>(*other.state_);
+    return *this;
+}
+ExtensionRegistry::ExtensionRegistry(ExtensionRegistry &&) noexcept = default;
+ExtensionRegistry &
+ExtensionRegistry::operator=(ExtensionRegistry &&) noexcept = default;
+ExtensionRegistry::~ExtensionRegistry() = default;
+
+void ExtensionRegistry::register_function(std::string name, std::size_t arity,
+                                          NativeFunction function) {
+    if (name.empty())
+        throw std::invalid_argument("extension function name cannot be empty");
+    if (!function)
+        throw std::invalid_argument("extension function cannot be empty");
+    const auto [_, inserted] = state_->functions.emplace(
+        std::move(name), Function{arity, std::move(function)});
+    if (!inserted)
+        throw std::invalid_argument("extension function is already registered");
+}
+
+void ExtensionRegistry::register_module(std::string name,
+                                        const ExtensionRegistry &module) {
+    if (name.empty())
+        throw std::invalid_argument("extension module name cannot be empty");
+    const auto [_, inserted] = state_->modules.emplace(std::move(name), module);
+    if (!inserted)
+        throw std::invalid_argument("extension module is already registered");
+}
+
+bool ExtensionValue::equals(const ExtensionValue &other) const {
+    return this == &other;
+}
+
+bool ExtensionValue::has_member(std::string_view) const { return false; }
+
+Value ExtensionValue::get_member(std::string_view, SourceLocation) const {
+    return Value();
+}
+
+bool ExtensionValue::supports_indexing() const { return false; }
+
+Value ExtensionValue::get_index(const Value &, SourceLocation) const {
+    return Value();
+}
+
+void ExtensionValue::set_index(const Value &, const Value &, SourceLocation) {}
+
+bool ExtensionValue::supports_length() const { return false; }
+
+Value ExtensionValue::length(SourceLocation) const { return Value(); }
+
+bool ExtensionValue::supports_iteration() const { return false; }
+
+std::vector<Value> ExtensionValue::iterate(SourceLocation) const { return {}; }
 
 struct Callable {
     virtual ~Callable() = default;
@@ -51,6 +124,29 @@ struct NativeCallable final : Callable {
     }
 };
 
+struct ModuleValue final : ExtensionValue {
+    explicit ModuleValue(std::unordered_map<std::string, Value> exports)
+        : exports(std::move(exports)) {}
+
+    std::string type_name() const override { return "module"; }
+    std::string to_string() const override { return "<module>"; }
+    bool has_member(std::string_view name) const override {
+        return exports.find(std::string(name)) != exports.end();
+    }
+    Value get_member(std::string_view name,
+                     SourceLocation location) const override {
+        const auto found = exports.find(std::string(name));
+        if (found == exports.end())
+            throw RuntimeError(RuntimeErrorCategory::UndefinedName,
+                               "module has no export '" + std::string(name) +
+                                   "'",
+                               location.line, location.column);
+        return found->second;
+    }
+
+    std::unordered_map<std::string, Value> exports;
+};
+
 struct UserCallable final : Callable {
     std::vector<std::string> parameters;
     const BlockStatement *body;
@@ -75,8 +171,13 @@ bool equal_values(const Value &left, const Value &right);
 
 class Runner {
   public:
-    Runner(std::ostream &output, std::shared_ptr<Environment> globals)
-        : globals_(std::move(globals)), environment_(globals_) {
+    Runner(
+        std::ostream &output, std::shared_ptr<Environment> globals,
+        const std::unordered_map<std::string, Value> *modules,
+        std::unordered_map<std::string, Value> *exports = nullptr,
+        std::function<Value(const std::string &, SourceLocation)> loader = {})
+        : globals_(std::move(globals)), environment_(globals_),
+          modules_(modules), exports_(exports), loader_(std::move(loader)) {
         (void)output;
     }
 
@@ -106,6 +207,17 @@ class Runner {
         if (auto *variable =
                 dynamic_cast<const VariableExpression *>(&expression))
             return lookup(variable->name, expression.location);
+        if (auto *member =
+                dynamic_cast<const MemberExpression *>(&expression)) {
+            Value object = expression_value(*member->object);
+            if (object.kind() != Value::Kind::Extension ||
+                !object.as_extension()->has_member(member->member))
+                fail(RuntimeErrorCategory::UndefinedName,
+                     "value has no member '" + member->member + "'",
+                     expression.location);
+            return object.as_extension()->get_member(member->member,
+                                                     expression.location);
+        }
         if (auto *array = dynamic_cast<const ArrayExpression *>(&expression)) {
             Array result;
             for (const auto &element : array->elements)
@@ -144,6 +256,53 @@ class Runner {
             execute_statements(block->statements);
             return;
         }
+        if (auto *exported =
+                dynamic_cast<const ExportStatement *>(&statement)) {
+            if (!exports_)
+                fail(RuntimeErrorCategory::InvalidArgument,
+                     "export is only valid inside a module",
+                     statement.location);
+            execute(*exported->declaration);
+
+            std::string name;
+            if (auto *function = dynamic_cast<const FunctionStatement *>(
+                    exported->declaration.get()))
+                name = function->name;
+            else if (auto *assignment =
+                         dynamic_cast<const AssignmentStatement *>(
+                             exported->declaration.get())) {
+                if (auto *variable = dynamic_cast<const VariableExpression *>(
+                        assignment->target.get()))
+                    name = variable->name;
+            }
+            if (name.empty())
+                fail(RuntimeErrorCategory::InvalidArgument,
+                     "only functions and names can be exported",
+                     statement.location);
+            if (!exports_->emplace(name, lookup(name, statement.location))
+                     .second)
+                fail(RuntimeErrorCategory::InvalidArgument,
+                     "duplicate module export '" + name + "'",
+                     statement.location);
+            return;
+        }
+        if (auto *imported =
+                dynamic_cast<const ImportStatement *>(&statement)) {
+            const auto found = modules_->find(imported->module);
+            if (found == modules_->end())
+                if (loader_) {
+                    assign(imported->module,
+                           loader_(imported->module, statement.location));
+                    return;
+                } else {
+                    fail(RuntimeErrorCategory::UndefinedName,
+                         "undefined module '" + imported->module + "'",
+                         statement.location);
+                }
+            else
+                assign(imported->module, found->second);
+            return;
+        }
         if (auto *expr =
                 dynamic_cast<const ExpressionStatement *>(&statement)) {
             expression_value(*expr->expression);
@@ -178,6 +337,17 @@ class Runner {
         }
         if (auto *loop = dynamic_cast<const ForStatement *>(&statement)) {
             Value iterable = expression_value(*loop->iterable);
+            if (iterable.kind() == Value::Kind::Extension) {
+                if (!iterable.as_extension()->supports_iteration())
+                    fail(RuntimeErrorCategory::TypeError,
+                         "for requires an iterable value", statement.location);
+                for (const Value &item :
+                     iterable.as_extension()->iterate(statement.location)) {
+                    assign(loop->variable, item);
+                    execute(*loop->body);
+                }
+                return;
+            }
             if (iterable.kind() != Value::Kind::Array)
                 fail(RuntimeErrorCategory::TypeError, "for requires an array",
                      statement.location);
@@ -243,6 +413,9 @@ class Runner {
         Value value;
     };
     std::shared_ptr<Environment> globals_, environment_;
+    const std::unordered_map<std::string, Value> *modules_;
+    std::unordered_map<std::string, Value> *exports_;
+    std::function<Value(const std::string &, SourceLocation)> loader_;
     bool in_function_ = false;
     Value expression_value(const Expression &e) { return expression(e); }
     [[noreturn]] void fail(RuntimeErrorCategory category,
@@ -332,6 +505,12 @@ class Runner {
     }
     Value indexed(Value &object, const Value &position,
                   SourceLocation location) {
+        if (object.kind() == Value::Kind::Extension) {
+            if (!object.as_extension()->supports_indexing())
+                fail(RuntimeErrorCategory::InvalidIndex,
+                     "value does not support indexing", location);
+            return object.as_extension()->get_index(position, location);
+        }
         if (object.kind() != Value::Kind::Array ||
             position.kind() != Value::Kind::Number)
             fail(RuntimeErrorCategory::InvalidIndex,
@@ -345,6 +524,13 @@ class Runner {
     }
     void set_index(Value &object, const Value &position, const Value &value,
                    SourceLocation location) {
+        if (object.kind() == Value::Kind::Extension) {
+            if (!object.as_extension()->supports_indexing())
+                fail(RuntimeErrorCategory::InvalidIndex,
+                     "value does not support indexing", location);
+            object.as_extension()->set_index(position, value, location);
+            return;
+        }
         if (object.kind() != Value::Kind::Array ||
             position.kind() != Value::Kind::Number)
             fail(RuntimeErrorCategory::InvalidIndex,
@@ -372,6 +558,10 @@ bool equal_values(const Value &left, const Value &right) {
         return left.as_boolean() == right.as_boolean();
     case Value::Kind::Function:
         return left.as_callable() == right.as_callable();
+    case Value::Kind::Extension:
+        return left.as_extension()->type_name() ==
+                   right.as_extension()->type_name() &&
+               left.as_extension()->equals(*right.as_extension());
     case Value::Kind::Array:
         if (left.as_array().size() != right.as_array().size())
             return false;
@@ -391,6 +581,7 @@ Value::Value(std::string value) : value_(std::move(value)) {}
 Value::Value(bool value) : value_(value) {}
 Value::Value(Array value) : value_(std::make_shared<Array>(std::move(value))) {}
 Value::Value(CallablePtr value) : value_(std::move(value)) {}
+Value::Value(ExtensionValuePtr value) : value_(std::move(value)) {}
 Value::Kind Value::kind() const noexcept {
     return static_cast<Kind>(value_.index());
 }
@@ -404,6 +595,9 @@ const Array &Value::as_array() const { return *std::get<ArrayPtr>(value_); }
 Array &Value::as_array() { return *std::get<ArrayPtr>(value_); }
 const Value::CallablePtr &Value::as_callable() const {
     return std::get<CallablePtr>(value_);
+}
+const Value::ExtensionValuePtr &Value::as_extension() const {
+    return std::get<ExtensionValuePtr>(value_);
 }
 bool Value::truthy() const noexcept {
     return kind() != Kind::Null && !(kind() == Kind::Boolean && !as_boolean());
@@ -422,6 +616,8 @@ std::string Value::to_string() const {
         return as_boolean() ? "true" : "false";
     case Kind::Function:
         return "<function>";
+    case Kind::Extension:
+        return as_extension()->to_string();
     case Kind::Array:
         out << "[";
         for (std::size_t i = 0; i < as_array().size(); ++i) {
@@ -443,12 +639,26 @@ RuntimeError::RuntimeError(RuntimeErrorCategory category, std::string message,
 struct Evaluator::State {
     std::shared_ptr<Environment> globals;
     std::ostream *output;
+    std::unordered_map<std::string, Value> modules;
+    std::shared_ptr<ModuleResolver> resolver;
+    std::unordered_map<std::string, Value> loaded_modules;
+    std::unordered_map<std::string, std::shared_ptr<Program>> module_programs;
+    std::unordered_set<std::string> loading_modules;
     std::vector<std::shared_ptr<Program>> repl_programs;
 };
 
-Evaluator::Evaluator(std::ostream &output) : state_(std::make_shared<State>()) {
+Evaluator::Evaluator(std::ostream &output)
+    : Evaluator(output, ExtensionRegistry{}) {}
+
+Evaluator::Evaluator(std::ostream &output, const ExtensionRegistry &extensions)
+    : Evaluator(output, extensions, nullptr) {}
+
+Evaluator::Evaluator(std::ostream &output, const ExtensionRegistry &extensions,
+                     std::shared_ptr<ModuleResolver> resolver)
+    : state_(std::make_shared<State>()) {
     state_->globals = std::make_shared<Environment>();
     state_->output = &output;
+    state_->resolver = std::move(resolver);
     auto add = [&](const std::string &name, std::size_t arity, auto fn) {
         state_->globals->values[name] =
             Value(std::make_shared<NativeCallable>(arity, fn));
@@ -462,9 +672,13 @@ Evaluator::Evaluator(std::ostream &output) : state_(std::make_shared<State>()) {
             return Value(static_cast<double>(a[0].as_string().size()));
         if (a[0].kind() == Value::Kind::Array)
             return Value(static_cast<double>(a[0].as_array().size()));
-        throw RuntimeError(RuntimeErrorCategory::TypeError,
-                           "length requires a string or array", l.line,
-                           l.column);
+        if (a[0].kind() == Value::Kind::Extension &&
+            a[0].as_extension()->supports_length())
+            return a[0].as_extension()->length(l);
+        throw RuntimeError(
+            RuntimeErrorCategory::TypeError,
+            "length requires a string, array, or extension value", l.line,
+            l.column);
     });
     add("sum", 1, [](const std::vector<Value> &a, SourceLocation l) {
         if (a[0].kind() != Value::Kind::Array)
@@ -523,15 +737,80 @@ Evaluator::Evaluator(std::ostream &output) : state_(std::make_shared<State>()) {
                                l.column);
         return Value(std::sqrt(a[0].as_number()));
     });
+
+    for (const auto &[name, function] : extensions.state_->functions) {
+        add(name, function.arity, function.function);
+    }
+
+    for (const auto &[module_name, module] : extensions.state_->modules) {
+        std::unordered_map<std::string, Value> exports;
+        for (const auto &[name, function] : module.state_->functions) {
+            exports.emplace(name, Value(std::make_shared<NativeCallable>(
+                                      function.arity, function.function)));
+        }
+        state_->modules.emplace(
+            module_name,
+            Value(std::make_shared<ModuleValue>(std::move(exports))));
+    }
 }
 Evaluator::Evaluator() : Evaluator(std::cout) {}
+
+Value Evaluator::load_module(const std::string &name, SourceLocation location) {
+    const auto cached = state_->loaded_modules.find(name);
+    if (cached != state_->loaded_modules.end())
+        return cached->second;
+    if (!state_->resolver)
+        throw RuntimeError(RuntimeErrorCategory::UndefinedName,
+                           "undefined module '" + name + "'", location.line,
+                           location.column);
+    if (!state_->loading_modules.emplace(name).second)
+        throw RuntimeError(RuntimeErrorCategory::InvalidArgument,
+                           "cyclic module import involving '" + name + "'",
+                           location.line, location.column);
+
+    try {
+        const auto source = state_->resolver->resolve(name, location);
+        if (!source)
+            throw RuntimeError(RuntimeErrorCategory::UndefinedName,
+                               "undefined module '" + name + "'", location.line,
+                               location.column);
+
+        auto environment = std::make_shared<Environment>(state_->globals);
+        std::unordered_map<std::string, Value> exports;
+        auto program = std::make_shared<Program>(parse(source->source));
+        Runner runner(
+            *state_->output, std::move(environment), &state_->modules, &exports,
+            [this](const std::string &module, SourceLocation import_location) {
+                return load_module(module, import_location);
+            });
+        runner.run(*program);
+
+        Value module = Value(std::make_shared<ModuleValue>(std::move(exports)));
+        state_->module_programs.emplace(name, std::move(program));
+        state_->loaded_modules.emplace(name, module);
+        state_->loading_modules.erase(name);
+        return module;
+    } catch (...) {
+        state_->loading_modules.erase(name);
+        throw;
+    }
+}
+
 Value Evaluator::evaluate(const Program &program) {
-    return Runner(*state_->output, state_->globals).run(program);
+    return Runner(*state_->output, state_->globals, &state_->modules, nullptr,
+                  [this](const std::string &module, SourceLocation location) {
+                      return load_module(module, location);
+                  })
+        .run(program);
 }
 std::optional<Value> Evaluator::evaluate_repl(Program program) {
     auto retained = std::make_shared<Program>(std::move(program));
     const auto result =
-        Runner(*state_->output, state_->globals).run_repl(*retained);
+        Runner(*state_->output, state_->globals, &state_->modules, nullptr,
+               [this](const std::string &module, SourceLocation location) {
+                   return load_module(module, location);
+               })
+            .run_repl(*retained);
     state_->repl_programs.push_back(std::move(retained));
     return result;
 }
