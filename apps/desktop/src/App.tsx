@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "preact/hooks";
+import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import { runNotebook } from "@abel/wasm";
 import "./App.css";
 
@@ -26,6 +26,51 @@ const makeCell = (source = ""): Cell => ({
   status: "idle",
 });
 const newNotebook = (): Notebook => ({ format: 1, cells: [makeCell(starter)] });
+
+const readEditable = (element: HTMLDivElement) =>
+  element.innerText.replace(/\r\n/g, "\n");
+
+function CodeInput({
+  value,
+  label,
+  onChange,
+  onFocus,
+  onKeyDown,
+}: {
+  value: string;
+  label: string;
+  onChange: (value: string) => void;
+  onFocus: () => void;
+  onKeyDown: (event: KeyboardEvent) => void;
+}) {
+  const element = useRef<HTMLDivElement>(null);
+
+  useLayoutEffect(() => {
+    if (element.current && readEditable(element.current) !== value) {
+      element.current.textContent = value;
+    }
+  }, [value]);
+
+  return (
+    <div
+      ref={element}
+      class="cell-input"
+      role="textbox"
+      aria-label={label}
+      aria-multiline="true"
+      contentEditable={true}
+      spellcheck={false}
+      onInput={(event) => onChange(readEditable(event.currentTarget))}
+      onFocus={onFocus}
+      onKeyDown={onKeyDown}
+      onPaste={(event) => {
+        event.preventDefault();
+        const text = event.clipboardData?.getData("text/plain") ?? "";
+        document.execCommand("insertText", false, text);
+      }}
+    />
+  );
+}
 
 function Icon({ name }: { name: "plus" | "play" | "save" | "open" | "close" }) {
   if (name === "plus")
@@ -324,13 +369,10 @@ function App() {
                   </span>
                 </div>
                 <div class="cell-main">
-                  <textarea
-                    aria-label={`Input cell ${index + 1}`}
+                  <CodeInput
                     value={cell.source}
-                    spellcheck={false}
-                    onInput={(event) =>
-                      updateCell(index, event.currentTarget.value)
-                    }
+                    label={`Input cell ${index + 1}`}
+                    onChange={(value) => updateCell(index, value)}
                     onFocus={() => setSelected(index)}
                     onKeyDown={(event) => {
                       if (

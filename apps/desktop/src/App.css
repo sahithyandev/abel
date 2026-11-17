@@ -375,11 +375,10 @@ svg {
 .cell-main {
   min-width: 0;
 }
-.cell textarea {
+.cell-input {
   display: block;
   width: 100%;
-  min-height: 105px;
-  resize: vertical;
+  min-height: calc(1.72em + 6px);
   padding: 3px 0;
   border: 0;
   color: #f3f0df;
@@ -389,8 +388,10 @@ svg {
     14px/1.72 "DM Mono",
     monospace;
   tab-size: 4;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
-.cell textarea::selection {
+.cell-input::selection {
   color: #15151a;
   background: #d7ff3f;
 }
