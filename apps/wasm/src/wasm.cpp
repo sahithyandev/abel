@@ -86,6 +86,10 @@ std::vector<NotebookCellResult> run_notebook(
     return results;
 }
 
+std::vector<NotebookCellResult> run_notebook_js(emscripten::val sources) {
+    return run_notebook(emscripten::vecFromJSArray<std::string>(sources));
+}
+
 }  // namespace abel::wasm
 
 EMSCRIPTEN_BINDINGS(abel_wasm) {
@@ -104,8 +108,7 @@ EMSCRIPTEN_BINDINGS(abel_wasm) {
         .field("output", &abel::wasm::NotebookCellResult::output)
         .field("value", &abel::wasm::NotebookCellResult::value)
         .field("error", &abel::wasm::NotebookCellResult::error);
-    emscripten::register_vector<std::string>("StringVector");
     emscripten::register_vector<abel::wasm::NotebookCellResult>("NotebookCellResultVector");
     emscripten::function("run", &abel::wasm::run);
-    emscripten::function("runNotebook", &abel::wasm::run_notebook);
+    emscripten::function("runNotebook", &abel::wasm::run_notebook_js);
 }
