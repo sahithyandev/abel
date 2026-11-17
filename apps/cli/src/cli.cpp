@@ -4,11 +4,14 @@
 #include "parser.h"
 #include "tokenizer.h"
 
+#include <cstdint>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <sstream>
 #include <string>
 #include <utility>
+#include <vector>
 
 #if defined(_WIN32)
 #include <io.h>
@@ -20,6 +23,65 @@ namespace abel {
 namespace {
 
 constexpr const char *kVersion = "0.1.0";
+constexpr std::uintmax_t kMaxModuleSourceSize = 1024 * 1024;
+
+class FileModuleResolver final : public ModuleResolver {
+  public:
+    explicit FileModuleResolver(std::vector<std::filesystem::path> roots)
+        : roots_(std::move(roots)) {}
+
+    std::optional<ModuleSource> resolve(std::string_view module,
+                                        SourceLocation) override {
+        for (const auto &root : roots_) {
+            const auto root_path = std::filesystem::weakly_canonical(root);
+            for (const auto &candidate :
+                 {root_path / (std::string(module) + ".abel"),
+                  root_path / std::string(module) / "module.abel"}) {
+                std::error_code error;
+                if (!std::filesystem::is_regular_file(candidate, error) ||
+                    error ||
+                    std::filesystem::file_size(candidate, error) >
+                        kMaxModuleSourceSize ||
+                    error || !inside(root_path, candidate))
+                    continue;
+                std::ifstream file(candidate);
+                if (!file)
+                    continue;
+                std::ostringstream source;
+                source << file.rdbuf();
+                return ModuleSource{source.str()};
+            }
+        }
+        return std::nullopt;
+    }
+
+  private:
+    static bool inside(const std::filesystem::path &root,
+                       const std::filesystem::path &candidate) {
+        const auto canonical = std::filesystem::weakly_canonical(candidate);
+        auto root_it = root.begin();
+        auto candidate_it = canonical.begin();
+        for (; root_it != root.end() && candidate_it != canonical.end();
+             ++root_it, ++candidate_it)
+            if (*root_it != *candidate_it)
+                return false;
+        return root_it == root.end();
+    }
+
+    std::vector<std::filesystem::path> roots_;
+};
+
+std::shared_ptr<ModuleResolver>
+file_resolver_for(const std::filesystem::path &source_path) {
+    std::error_code error;
+    const auto current = std::filesystem::current_path(error);
+    std::vector<std::filesystem::path> roots;
+    if (!error)
+        roots.push_back(current);
+    if (!source_path.empty() && source_path.has_parent_path())
+        roots.push_back(source_path.parent_path());
+    return std::make_shared<FileModuleResolver>(std::move(roots));
+}
 
 void usage(std::ostream &out) {
     out << "Usage: abel [--help] [--version] [FILE|-]\n"
@@ -93,7 +155,8 @@ bool terminal_input(std::istream &input) {
 int run_source(const std::string &source, const std::string &source_name,
                std::ostream &output, std::ostream &error) {
     try {
-        Evaluator evaluator(output);
+        Evaluator evaluator(output, ExtensionRegistry{},
+                            file_resolver_for(source_name));
         evaluator.evaluate(source);
         return 0;
     } catch (const LexError &exception) {
@@ -107,7 +170,8 @@ int run_source(const std::string &source, const std::string &source_name,
 }
 
 int run_repl(std::istream &input, std::ostream &output, std::ostream &error) {
-    Evaluator evaluator(output);
+    Evaluator evaluator(output, ExtensionRegistry{},
+                        file_resolver_for(std::filesystem::path{}));
     std::string buffer;
     std::string line;
     bool interactive = terminal_input(input);

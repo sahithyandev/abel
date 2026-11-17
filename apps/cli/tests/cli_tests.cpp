@@ -1,6 +1,8 @@
 #include "cli.h"
 
 #include <cstdlib>
+#include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <sstream>
 #include <string>
@@ -81,6 +83,33 @@ void test_errors() {
             "unknown option diagnostic");
 }
 
+void test_local_source_module() {
+    const auto root =
+        std::filesystem::temp_directory_path() / "abel-cli-module-test";
+    std::filesystem::remove_all(root);
+    std::filesystem::create_directories(root);
+    {
+        std::ofstream module(root / "sample.abel");
+        module << "export fn answer() { return 42 }\n";
+    }
+    {
+        std::ofstream program(root / "program.abel");
+        program << "import sample\nprint(sample.answer())\n";
+    }
+
+    const std::string program_path = (root / "program.abel").string();
+    char *path = const_cast<char *>(program_path.c_str());
+    char *args[] = {const_cast<char *>("abel"), path};
+    std::istringstream input;
+    std::ostringstream output;
+    std::ostringstream error;
+    require(abel::run_cli(2, args, input, output, error) == 0,
+            "local source module exit code");
+    require(output.str() == "42\n", "local source module output");
+    require(error.str().empty(), "local source module diagnostics");
+    std::filesystem::remove_all(root);
+}
+
 } // namespace
 
 int main() {
@@ -88,6 +117,7 @@ int main() {
     test_stdin_script();
     test_repl_state_and_multiline();
     test_errors();
+    test_local_source_module();
     std::cout << "CLI tests passed\n";
     return EXIT_SUCCESS;
 }
