@@ -9,6 +9,7 @@ option(ABEL_BUILD_WASM "Build the Abel WebAssembly runtime" OFF)
 option(ABEL_ENABLE_COVERAGE "Instrument native targets for gcov coverage" OFF)
 
 add_subdirectory(apps/cli)
+add_subdirectory(packages/matrix)
 
 if (ABEL_BUILD_WASM)
     add_subdirectory(apps/wasm)
