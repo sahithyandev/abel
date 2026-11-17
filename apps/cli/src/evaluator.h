@@ -128,10 +128,23 @@ class ExtensionRegistry {
     friend class Evaluator;
 };
 
+struct ModuleSource {
+    std::string source;
+};
+
+class ModuleResolver {
+  public:
+    virtual ~ModuleResolver() = default;
+    virtual std::optional<ModuleSource> resolve(std::string_view module,
+                                                SourceLocation location) = 0;
+};
+
 class Evaluator {
   public:
     explicit Evaluator(std::ostream &output);
     Evaluator(std::ostream &output, const ExtensionRegistry &extensions);
+    Evaluator(std::ostream &output, const ExtensionRegistry &extensions,
+              std::shared_ptr<ModuleResolver> resolver);
     Evaluator();
 
     Value evaluate(const Program &program);
@@ -142,6 +155,8 @@ class Evaluator {
   private:
     struct State;
     std::shared_ptr<State> state_;
+
+    Value load_module(const std::string &name, SourceLocation location);
 };
 
 } // namespace abel

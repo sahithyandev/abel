@@ -5,6 +5,7 @@
 #include <iostream>
 #include <sstream>
 #include <string>
+#include <unordered_map>
 
 namespace {
 using namespace abel;
@@ -51,6 +52,21 @@ class PointValue final : public ExtensionValue {
 
     double x;
     double y;
+};
+
+class MapResolver final : public ModuleResolver {
+  public:
+    std::unordered_map<std::string, std::string> sources;
+    std::unordered_map<std::string, int> resolutions;
+
+    std::optional<ModuleSource> resolve(std::string_view module,
+                                        SourceLocation) override {
+        ++resolutions[std::string(module)];
+        const auto found = sources.find(std::string(module));
+        if (found == sources.end())
+            return std::nullopt;
+        return ModuleSource{found->second};
+    }
 };
 
 void require(bool condition, const std::string &message) {
@@ -330,6 +346,26 @@ void test_extension_registry() {
     module_evaluator.evaluate("import math; answer = math.double(21)");
     require(number(module_evaluator, "answer") == 42,
             "qualified module export");
+
+    auto resolver = std::make_shared<MapResolver>();
+    resolver->sources["sample"] =
+        "export fn twice(value) { return value * 2 }\n"
+        "fn secret() { return 99 }";
+    Evaluator source_evaluator(std::cout, ExtensionRegistry{}, resolver);
+    source_evaluator.evaluate(
+        "import sample; import sample; answer = sample.twice(21)");
+    require(number(source_evaluator, "answer") == 42 &&
+                resolver->resolutions["sample"] == 1,
+            "source module evaluation and caching");
+    require_error([&] { source_evaluator.evaluate("sample.secret()"); },
+                  RuntimeErrorCategory::UndefinedName, 1, 1);
+
+    auto cyclic_resolver = std::make_shared<MapResolver>();
+    cyclic_resolver->sources["a"] = "import b";
+    cyclic_resolver->sources["b"] = "import a";
+    Evaluator cyclic_evaluator(std::cout, ExtensionRegistry{}, cyclic_resolver);
+    require_error([&] { cyclic_evaluator.evaluate("import a"); },
+                  RuntimeErrorCategory::InvalidArgument, 1, 1);
 }
 } // namespace
 

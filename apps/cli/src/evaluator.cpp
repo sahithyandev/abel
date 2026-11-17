@@ -8,6 +8,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 
 namespace abel {
@@ -170,11 +171,13 @@ bool equal_values(const Value &left, const Value &right);
 
 class Runner {
   public:
-    Runner(std::ostream &output, std::shared_ptr<Environment> globals,
-           const std::unordered_map<std::string, Value> *modules,
-           std::unordered_map<std::string, Value> *exports = nullptr)
+    Runner(
+        std::ostream &output, std::shared_ptr<Environment> globals,
+        const std::unordered_map<std::string, Value> *modules,
+        std::unordered_map<std::string, Value> *exports = nullptr,
+        std::function<Value(const std::string &, SourceLocation)> loader = {})
         : globals_(std::move(globals)), environment_(globals_),
-          modules_(modules), exports_(exports) {
+          modules_(modules), exports_(exports), loader_(std::move(loader)) {
         (void)output;
     }
 
@@ -287,10 +290,17 @@ class Runner {
                 dynamic_cast<const ImportStatement *>(&statement)) {
             const auto found = modules_->find(imported->module);
             if (found == modules_->end())
-                fail(RuntimeErrorCategory::UndefinedName,
-                     "undefined module '" + imported->module + "'",
-                     statement.location);
-            assign(imported->module, found->second);
+                if (loader_) {
+                    assign(imported->module,
+                           loader_(imported->module, statement.location));
+                    return;
+                } else {
+                    fail(RuntimeErrorCategory::UndefinedName,
+                         "undefined module '" + imported->module + "'",
+                         statement.location);
+                }
+            else
+                assign(imported->module, found->second);
             return;
         }
         if (auto *expr =
@@ -405,6 +415,7 @@ class Runner {
     std::shared_ptr<Environment> globals_, environment_;
     const std::unordered_map<std::string, Value> *modules_;
     std::unordered_map<std::string, Value> *exports_;
+    std::function<Value(const std::string &, SourceLocation)> loader_;
     bool in_function_ = false;
     Value expression_value(const Expression &e) { return expression(e); }
     [[noreturn]] void fail(RuntimeErrorCategory category,
@@ -629,6 +640,10 @@ struct Evaluator::State {
     std::shared_ptr<Environment> globals;
     std::ostream *output;
     std::unordered_map<std::string, Value> modules;
+    std::shared_ptr<ModuleResolver> resolver;
+    std::unordered_map<std::string, Value> loaded_modules;
+    std::unordered_map<std::string, std::shared_ptr<Program>> module_programs;
+    std::unordered_set<std::string> loading_modules;
     std::vector<std::shared_ptr<Program>> repl_programs;
 };
 
@@ -636,9 +651,14 @@ Evaluator::Evaluator(std::ostream &output)
     : Evaluator(output, ExtensionRegistry{}) {}
 
 Evaluator::Evaluator(std::ostream &output, const ExtensionRegistry &extensions)
+    : Evaluator(output, extensions, nullptr) {}
+
+Evaluator::Evaluator(std::ostream &output, const ExtensionRegistry &extensions,
+                     std::shared_ptr<ModuleResolver> resolver)
     : state_(std::make_shared<State>()) {
     state_->globals = std::make_shared<Environment>();
     state_->output = &output;
+    state_->resolver = std::move(resolver);
     auto add = [&](const std::string &name, std::size_t arity, auto fn) {
         state_->globals->values[name] =
             Value(std::make_shared<NativeCallable>(arity, fn));
@@ -734,14 +754,62 @@ Evaluator::Evaluator(std::ostream &output, const ExtensionRegistry &extensions)
     }
 }
 Evaluator::Evaluator() : Evaluator(std::cout) {}
+
+Value Evaluator::load_module(const std::string &name, SourceLocation location) {
+    const auto cached = state_->loaded_modules.find(name);
+    if (cached != state_->loaded_modules.end())
+        return cached->second;
+    if (!state_->resolver)
+        throw RuntimeError(RuntimeErrorCategory::UndefinedName,
+                           "undefined module '" + name + "'", location.line,
+                           location.column);
+    if (!state_->loading_modules.emplace(name).second)
+        throw RuntimeError(RuntimeErrorCategory::InvalidArgument,
+                           "cyclic module import involving '" + name + "'",
+                           location.line, location.column);
+
+    try {
+        const auto source = state_->resolver->resolve(name, location);
+        if (!source)
+            throw RuntimeError(RuntimeErrorCategory::UndefinedName,
+                               "undefined module '" + name + "'", location.line,
+                               location.column);
+
+        auto environment = std::make_shared<Environment>(state_->globals);
+        std::unordered_map<std::string, Value> exports;
+        auto program = std::make_shared<Program>(parse(source->source));
+        Runner runner(
+            *state_->output, std::move(environment), &state_->modules, &exports,
+            [this](const std::string &module, SourceLocation import_location) {
+                return load_module(module, import_location);
+            });
+        runner.run(*program);
+
+        Value module = Value(std::make_shared<ModuleValue>(std::move(exports)));
+        state_->module_programs.emplace(name, std::move(program));
+        state_->loaded_modules.emplace(name, module);
+        state_->loading_modules.erase(name);
+        return module;
+    } catch (...) {
+        state_->loading_modules.erase(name);
+        throw;
+    }
+}
+
 Value Evaluator::evaluate(const Program &program) {
-    return Runner(*state_->output, state_->globals, &state_->modules)
+    return Runner(*state_->output, state_->globals, &state_->modules, nullptr,
+                  [this](const std::string &module, SourceLocation location) {
+                      return load_module(module, location);
+                  })
         .run(program);
 }
 std::optional<Value> Evaluator::evaluate_repl(Program program) {
     auto retained = std::make_shared<Program>(std::move(program));
     const auto result =
-        Runner(*state_->output, state_->globals, &state_->modules)
+        Runner(*state_->output, state_->globals, &state_->modules, nullptr,
+               [this](const std::string &module, SourceLocation location) {
+                   return load_module(module, location);
+               })
             .run_repl(*retained);
     state_->repl_programs.push_back(std::move(retained));
     return result;
