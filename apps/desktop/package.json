@@ -7,6 +7,7 @@
     "dev": "vite",
     "prepare:wasm": "bun scripts/prepare-wasm.mjs",
     "build": "bun run prepare:wasm && tsc && vite build",
+    "test": "bun test",
     "preview": "vite preview",
     "tauri": "tauri"
   },

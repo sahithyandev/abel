@@ -5,7 +5,10 @@ const DEFAULT_BASE_URL = "/wasm/";
  * The generated files are copied to the docs site's public/wasm directory
  * during the docs preparation step.
  */
-export async function createAbelRuntime({ baseUrl = DEFAULT_BASE_URL } = {}) {
+export async function createAbelRuntime({
+  baseUrl = DEFAULT_BASE_URL,
+  moduleLoader,
+} = {}) {
   const normalizedBase = baseUrl.endsWith("/") ? baseUrl : `${baseUrl}/`;
   const moduleUrl = `${normalizedBase}abel.js`;
   const wasmUrl = `${normalizedBase}abel.wasm`;
@@ -16,7 +19,7 @@ export async function createAbelRuntime({ baseUrl = DEFAULT_BASE_URL } = {}) {
 
   // Keep this import outside Vite's static dependency graph. The generated
   // ESM file lives in `public/wasm` and must be fetched by the browser as-is.
-  const loadModule = new Function("url", "return import(url);");
+  const loadModule = moduleLoader ?? new Function("url", "return import(url);");
   const module = await loadModule(moduleUrl);
   const factory = module.default ?? module;
   return factory({

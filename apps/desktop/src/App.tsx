@@ -1,31 +1,13 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import { runNotebook } from "@abel/wasm";
+import {
+  makeCell,
+  newNotebook,
+  notebookPayload,
+  parseNotebook,
+  type Notebook,
+} from "./notebook";
 import "./App.css";
-
-type CellStatus = "idle" | "success" | "error" | "stale";
-type Cell = {
-  id: string;
-  source: string;
-  output: string;
-  value: string;
-  error?: { category: string; message: string; line: number; column: number };
-  status: CellStatus;
-};
-type Notebook = { format: 1; cells: Cell[] };
-const starter = `fn mean(values) {
-    return sum(values) / length(values)
-}
-
-scores = [72, 81, 95]
-mean(scores)`;
-const makeCell = (source = ""): Cell => ({
-  id: crypto.randomUUID(),
-  source,
-  output: "",
-  value: "",
-  status: "idle",
-});
-const newNotebook = (): Notebook => ({ format: 1, cells: [makeCell(starter)] });
 
 const readEditable = (element: HTMLDivElement) =>
   element.innerText.replace(/\r\n/g, "\n");
@@ -229,23 +211,7 @@ function App() {
     const reader = new FileReader();
     reader.onload = () => {
       try {
-        const parsed = JSON.parse(String(reader.result)) as Notebook;
-        if (
-          parsed.format !== 1 ||
-          !Array.isArray(parsed.cells) ||
-          parsed.cells.length === 0
-        )
-          throw new Error("unsupported notebook format");
-        setNotebook({
-          format: 1,
-          cells: parsed.cells.map((cell) => ({
-            ...makeCell(),
-            ...cell,
-            status: "stale",
-            output: "",
-            value: "",
-          })),
-        });
+        setNotebook(parseNotebook(String(reader.result)));
         setFilename(file.name);
         setSelected(0);
         setDirty(false);
@@ -260,14 +226,7 @@ function App() {
     input.value = "";
   };
   const saveNotebook = () => {
-    const payload = JSON.stringify(
-      {
-        format: 1,
-        cells: notebook.cells.map(({ id, source }) => ({ id, source })),
-      },
-      null,
-      2,
-    );
+    const payload = notebookPayload(notebook);
     const link = document.createElement("a");
     link.href = URL.createObjectURL(
       new Blob([payload], { type: "application/json" }),

@@ -6,13 +6,14 @@ RUSTFMT ?= rustfmt
 
 .DEFAULT_GOAL := help
 
-.PHONY: help configure cli build test wasm docs docs-dev desktop fmt run clean setup-hooks
+.PHONY: help configure cli build test test-all wasm docs docs-dev desktop fmt run clean setup-hooks
 
 help:
 	@printf '%s\n' \
 		'Abel development commands:' \
 		'  make cli       Configure and compile the native CLI' \
 		'  make test      Compile and run the C++ test suite' \
+		'  make test-all  Run native, JavaScript, and Rust tests' \
 		'  make fmt       Format all tracked source files' \
 		'  make wasm      Build the WebAssembly runtime' \
 		'  make docs      Build the documentation site' \
@@ -57,6 +58,12 @@ build: cli
 test: configure
 	$(CMAKE) --build $(BUILD_DIR)
 	ctest --test-dir $(BUILD_DIR) --output-on-failure
+
+test-all: test
+	$(BUN) run --cwd apps/desktop test
+	$(BUN) run --cwd packages/wasm test
+	$(BUN) run --cwd apps/docs test
+	cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml
 
 wasm:
 	$(BUN) run --cwd packages/wasm build

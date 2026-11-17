@@ -184,6 +184,34 @@ void test_errors() {
             e.evaluate("sum([1, true])");
         },
         RuntimeErrorCategory::TypeError, 1, 1);
+    require_error(
+        [] {
+            Evaluator e;
+            e.evaluate("values = [1]; values[-1]");
+        },
+        RuntimeErrorCategory::InvalidIndex, 1, 15);
+    require_error(
+        [] {
+            Evaluator e;
+            e.evaluate("min([])");
+        },
+        RuntimeErrorCategory::InvalidArgument, 1, 1);
+    require_error(
+        [] {
+            Evaluator e;
+            e.evaluate("length(42)");
+        },
+        RuntimeErrorCategory::TypeError, 1, 1);
+}
+
+void test_repl_evaluation() {
+    std::ostringstream output;
+    Evaluator evaluator(output);
+    auto first = evaluator.evaluate_repl(parse("value = 7"));
+    auto second = evaluator.evaluate_repl(parse("value * 3"));
+    require(!first, "REPL assignment has no expression result");
+    require(second && second->as_number() == 21,
+            "REPL preserves state between cells");
 }
 } // namespace
 
@@ -194,6 +222,7 @@ int main() {
     test_builtins_and_output();
     test_equality_and_short_circuit();
     test_errors();
+    test_repl_evaluation();
     std::cout << "Evaluator tests passed\n";
     return EXIT_SUCCESS;
 }

@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "bun run prepare:wasm && astro dev --force",
     "build": "bun run prepare:wasm && astro build",
+    "test": "bun test",
     "prepare:wasm": "bun scripts/prepare-wasm.mjs",
     "preview": "astro preview"
   },
