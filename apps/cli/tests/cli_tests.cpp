@@ -92,9 +92,19 @@ void test_local_source_module() {
         std::ofstream module(root / "sample.abel");
         module << "export fn answer() { return 42 }\n";
     }
+    std::filesystem::create_directories(root / "packaged" / "src");
+    {
+        std::ofstream manifest(root / "packaged" / "abel.toml");
+        manifest << "[package]\n"
+                    "name = \"packaged\"\n"
+                    "entry = \"src/main.abel\"\n";
+        std::ofstream module(root / "packaged" / "src" / "main.abel");
+        module << "export fn answer() { return 84 }\n";
+    }
     {
         std::ofstream program(root / "program.abel");
-        program << "import sample\nprint(sample.answer())\n";
+        program << "import sample\nimport packaged\n"
+                   "print(sample.answer() + packaged.answer())\n";
     }
 
     const std::string program_path = (root / "program.abel").string();
@@ -105,7 +115,7 @@ void test_local_source_module() {
     std::ostringstream error;
     require(abel::run_cli(2, args, input, output, error) == 0,
             "local source module exit code");
-    require(output.str() == "42\n", "local source module output");
+    require(output.str() == "126\n", "local source module output");
     require(error.str().empty(), "local source module diagnostics");
     std::filesystem::remove_all(root);
 }

@@ -24,6 +24,61 @@ namespace {
 
 constexpr const char *kVersion = "0.1.0";
 constexpr std::uintmax_t kMaxModuleSourceSize = 1024 * 1024;
+constexpr std::uintmax_t kMaxManifestSize = 64 * 1024;
+
+std::string trim(std::string value) {
+    const auto first = value.find_first_not_of(" \t\r\n");
+    if (first == std::string::npos)
+        return {};
+    const auto last = value.find_last_not_of(" \t\r\n");
+    return value.substr(first, last - first + 1);
+}
+
+std::optional<std::string> quoted_manifest_value(const std::string &line,
+                                                 const std::string &key) {
+    const std::string prefix = key + " = \"";
+    if (line.rfind(prefix, 0) != 0 || line.size() < prefix.size() + 1 ||
+        line.back() != '"')
+        return std::nullopt;
+    return line.substr(prefix.size(), line.size() - prefix.size() - 1);
+}
+
+std::optional<std::filesystem::path>
+manifest_entry(const std::filesystem::path &package_root,
+               std::string_view module) {
+    const auto manifest_path = package_root / "abel.toml";
+    std::error_code error;
+    if (!std::filesystem::is_regular_file(manifest_path, error) || error ||
+        std::filesystem::file_size(manifest_path, error) > kMaxManifestSize ||
+        error)
+        return std::nullopt;
+    std::ifstream manifest(manifest_path);
+    if (!manifest)
+        return std::nullopt;
+
+    std::string line;
+    bool in_package = false;
+    std::optional<std::string> name;
+    std::optional<std::string> entry;
+    while (std::getline(manifest, line)) {
+        line = trim(line);
+        if (line.empty() || line.front() == '#')
+            continue;
+        if (line.front() == '[') {
+            in_package = line == "[package]";
+            continue;
+        }
+        if (!in_package)
+            continue;
+        if (const auto value = quoted_manifest_value(line, "name"))
+            name = value;
+        else if (const auto value = quoted_manifest_value(line, "entry"))
+            entry = value;
+    }
+    if (!name || !entry || *name != module || entry->empty())
+        return std::nullopt;
+    return package_root / *entry;
+}
 
 class FileModuleResolver final : public ModuleResolver {
   public:
@@ -34,6 +89,22 @@ class FileModuleResolver final : public ModuleResolver {
                                         SourceLocation) override {
         for (const auto &root : roots_) {
             const auto root_path = std::filesystem::weakly_canonical(root);
+            const auto package_root = root_path / std::string(module);
+            if (const auto entry = manifest_entry(package_root, module);
+                entry && inside(root_path, *entry)) {
+                std::error_code error;
+                if (std::filesystem::is_regular_file(*entry, error) && !error &&
+                    std::filesystem::file_size(*entry, error) <=
+                        kMaxModuleSourceSize &&
+                    !error) {
+                    std::ifstream file(*entry);
+                    if (file) {
+                        std::ostringstream source;
+                        source << file.rdbuf();
+                        return ModuleSource{source.str()};
+                    }
+                }
+            }
             for (const auto &candidate :
                  {root_path / (std::string(module) + ".abel"),
                   root_path / std::string(module) / "module.abel"}) {
