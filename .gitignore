@@ -1,4 +1,5 @@
 /build/
+/coverage/
 packages/wasm/build/
 packages/wasm/dist/
 apps/docs/node_modules/

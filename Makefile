@@ -6,7 +6,7 @@ RUSTFMT ?= rustfmt
 
 .DEFAULT_GOAL := help
 
-.PHONY: help configure cli build test test-all wasm docs docs-dev desktop fmt run clean setup-hooks
+.PHONY: help configure cli build test test-all coverage wasm docs docs-dev desktop fmt run clean setup-hooks
 
 help:
 	@printf '%s\n' \
@@ -14,6 +14,7 @@ help:
 		'  make cli       Configure and compile the native CLI' \
 		'  make test      Compile and run the C++ test suite' \
 		'  make test-all  Run native, JavaScript, and Rust tests' \
+		'  make coverage  Generate native gcov and JavaScript LCOV reports' \
 		'  make fmt       Format all tracked source files' \
 		'  make wasm      Build the WebAssembly runtime' \
 		'  make docs      Build the documentation site' \
@@ -64,6 +65,25 @@ test-all: test
 	$(BUN) run --cwd packages/wasm test
 	$(BUN) run --cwd apps/docs test
 	cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml
+
+coverage:
+	@mkdir -p coverage/native coverage/desktop coverage/wasm coverage/docs
+	$(CMAKE) -S . -B coverage/build -DBUILD_TESTING=ON -DABEL_ENABLE_COVERAGE=ON
+	$(CMAKE) --build coverage/build
+	ctest --test-dir coverage/build --output-on-failure
+	@cd coverage/native && \
+	  gcov -p -o ../build/apps/cli/CMakeFiles/abel_tokenizer.dir/src/tokenizer.cpp.gcda ../../apps/cli/src/tokenizer.cpp > tokenizer.txt && \
+	  gcov -p -o ../build/apps/cli/CMakeFiles/abel_parser.dir/src/parser.cpp.gcda ../../apps/cli/src/parser.cpp > parser.txt && \
+	  gcov -p -o ../build/apps/cli/CMakeFiles/abel_evaluator.dir/src/evaluator.cpp.gcda ../../apps/cli/src/evaluator.cpp > evaluator.txt && \
+	  gcov -p -o ../build/apps/cli/CMakeFiles/abel_cli.dir/src/cli.cpp.gcda ../../apps/cli/src/cli.cpp > cli.txt
+	$(BUN) run --cwd apps/desktop test --coverage --coverage-reporter=lcov --coverage-dir ../../coverage/desktop
+	$(BUN) run --cwd packages/wasm test --coverage --coverage-reporter=lcov --coverage-dir ../../coverage/wasm
+	$(BUN) run --cwd apps/docs test --coverage --coverage-reporter=lcov --coverage-dir ../../coverage/docs
+	@if cargo llvm-cov --version >/dev/null 2>&1; then \
+		cargo llvm-cov --manifest-path apps/desktop/src-tauri/Cargo.toml --lcov --output-path coverage/tauri.lcov; \
+	else \
+		echo 'Rust coverage skipped: install cargo-llvm-cov to generate coverage/tauri.lcov'; \
+	fi
 
 wasm:
 	$(BUN) run --cwd packages/wasm build
