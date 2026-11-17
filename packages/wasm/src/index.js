@@ -31,11 +31,17 @@ export async function run(source, options) {
 
 export async function runNotebook(sources, options) {
   const runtime = await createAbelRuntime(options);
-  const cells = runtime.runNotebook(sources);
-  return Array.from(cells, (cell) => ({
-    ok: cell.ok,
-    output: cell.output,
-    value: cell.value,
-    error: cell.error,
-  }));
+  const input = new runtime.StringVector();
+  sources.forEach((source) => input.push_back(source));
+  try {
+    const cells = runtime.runNotebook(input);
+    return Array.from(cells, (cell) => ({
+      ok: cell.ok,
+      output: cell.output,
+      value: cell.value,
+      error: cell.error,
+    }));
+  } finally {
+    input.delete();
+  }
 }
