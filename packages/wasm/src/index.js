@@ -28,3 +28,14 @@ export async function run(source, options) {
   const runtime = await createAbelRuntime(options);
   return runtime.run(source);
 }
+
+export async function runNotebook(sources, options) {
+  const runtime = await createAbelRuntime(options);
+  const cells = runtime.runNotebook(sources);
+  return Array.from(cells, (cell) => ({
+    ok: cell.ok,
+    output: cell.output,
+    value: cell.value,
+    error: cell.error,
+  }));
+}
